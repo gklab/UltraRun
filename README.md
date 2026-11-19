@@ -1,8 +1,17 @@
-# <img src="ultrarun/web/logo.png" width="52" height="52" alt=""> UltraRun
+<p align="center">
+  <img src="ultrarun/web/logo.png" width="112" height="112" alt="">
+</p>
+<h1 align="center">UltraRun</h1>
+<p align="center">Local BF16 inference on Apple Silicon</p>
+<p align="center">
+  <a href="README.md" lang="en" aria-current="page"><kbd><strong>English</strong></kbd></a> ·
+  <a href="README.zh-CN.md" lang="zh-CN"><kbd>中文</kbd></a>
+  &nbsp;|&nbsp;
+  <a href="#performance">Performance</a> ·
+  <a href="#quick-start">Quick start</a>
+</p>
 
-<a href="README.md" lang="en" aria-current="page"><kbd><strong>English</strong></kbd></a> · <a href="README.zh-CN.md" lang="zh-CN"><kbd>中文</kbd></a>
-
-UltraRun is a local text inference engine for [Qwen3.8-27B BF16](https://huggingface.co/Qwen/Qwen3.8-27B/tree/37561816e66b5b9153b1b64c10968c18c1e6f4a0) on Apple Silicon. It loads the original safetensors weights, runs inference with MLX and custom Metal kernels, and streams responses in the browser and terminal.
+Run the original [Qwen3.8-27B BF16](https://huggingface.co/Qwen/Qwen3.8-27B/tree/37561816e66b5b9153b1b64c10968c18c1e6f4a0) safetensors weights with MLX and custom Metal kernels. UltraRun streams chat responses in the browser and terminal.
 
 **M2 Ultra benchmarks reached 51.63 tokens/s in Chinese streaming chat and 0.45 s to first token on a follow-up turn with prefix reuse.**
 

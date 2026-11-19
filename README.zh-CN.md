@@ -1,8 +1,17 @@
-# <img src="ultrarun/web/logo.png" width="52" height="52" alt=""> UltraRun
+<p align="center">
+  <img src="ultrarun/web/logo.png" width="112" height="112" alt="">
+</p>
+<h1 align="center">UltraRun</h1>
+<p align="center">面向 Apple Silicon 的本地 BF16 推理引擎</p>
+<p align="center">
+  <a href="README.md" lang="en"><kbd>English</kbd></a> ·
+  <a href="README.zh-CN.md" lang="zh-CN" aria-current="page"><kbd><strong>中文</strong></kbd></a>
+  &nbsp;|&nbsp;
+  <a href="#性能">性能</a> ·
+  <a href="#快速开始">快速开始</a>
+</p>
 
-<a href="README.md" lang="en"><kbd>English</kbd></a> · <a href="README.zh-CN.md" lang="zh-CN" aria-current="page"><kbd><strong>中文</strong></kbd></a>
-
-在 Apple Silicon 上运行 [Qwen3.8-27B BF16](https://huggingface.co/Qwen/Qwen3.8-27B/tree/37561816e66b5b9153b1b64c10968c18c1e6f4a0) 的本地文本推理引擎。直接加载原版 safetensors，以 MLX 和自定义 Metal 内核运行模型，支持网页和终端流式聊天。
+直接加载 [Qwen3.8-27B BF16](https://huggingface.co/Qwen/Qwen3.8-27B/tree/37561816e66b5b9153b1b64c10968c18c1e6f4a0) 原版 safetensors 权重，通过 MLX 和自定义 Metal 内核进行推理，支持网页和终端流式聊天。
 
 **M2 Ultra 实测：中文流式解码 51.63 token/s，复用会话前缀时首 token 为 0.45 秒。**
 
