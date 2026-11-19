@@ -15,36 +15,52 @@
         <span class="brand-mark" aria-hidden="true">›_</span>
         <div>
           <strong>UltraRun</strong>
-          <span id="model">Qwen3.8-27B</span>
+          <span class="model" id="model">Qwen3.8-27B</span>
         </div>
       </div>
       <div class="topbar-actions">
         <span class="connection" id="connection" role="status">Connecting</span>
-        <button class="secondary" id="reset" type="button">New chat</button>
+        <button class="secondary" id="reset" type="button"><span class="plus" aria-hidden="true">+</span> New chat</button>
       </div>
     </div>
   </header>
-  <main>
+
+  <main class="chat">
     <section class="transcript" id="transcript" aria-label="Chat transcript">
       <div class="conversation">
         <div class="welcome" id="welcome">
-          <h1>Local chat</h1>
-          <p>Responses stream as they’re generated, with support for Markdown tables, code blocks, and HTML previews.</p>
-          <button class="secondary" id="example" type="button">Try a Markdown example</button>
+          <h1>Chat with your local model</h1>
+          <p>Run prompts on your Mac and see the performance of each reply.</p>
         </div>
         <div id="messages"></div>
       </div>
     </section>
+
     <div class="composer-area">
       <form id="composer">
         <textarea id="prompt" rows="2" placeholder="Message Qwen" aria-label="Message" required></textarea>
         <div class="composer-controls">
-          <label for="limit">Max output tokens <input id="limit" type="number" min="1" step="1" value="1024" required></label>
-          <span class="keyhint">Enter to send · Shift+Enter for a new line</span>
-          <button class="primary" id="send" type="submit">Send</button>
+          <label class="output-limit" for="limit">
+            <span>Max output<span class="token-label"> tokens</span></span>
+            <input id="limit" type="number" inputmode="numeric" min="1" step="1" value="1024" required>
+          </label>
+          <span class="keyhint"><kbd>Shift</kbd> <kbd>Enter</kbd> for a new line</span>
+          <button class="primary" id="send" type="submit">
+            <span id="send-label">Send</span> <span class="send-key" aria-hidden="true">↵</span>
+          </button>
         </div>
       </form>
       <div id="notice" role="status" aria-live="polite"></div>
+      <div class="suggestions" aria-label="Example prompts">
+        <button class="suggestion" type="button"
+          data-prompt="Compare write-through and write-back caching. Include a Markdown table and a short Python example.">
+          Compare cache strategies <span aria-hidden="true">↗</span>
+        </button>
+        <button class="suggestion" type="button"
+          data-prompt="Create a small HTML card that explains speculative decoding in three steps. Return one self-contained HTML code block with inline styles.">
+          Try an HTML preview <span aria-hidden="true">↗</span>
+        </button>
+      </div>
     </div>
   </main>
 </body>

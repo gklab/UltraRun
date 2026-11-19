@@ -16,9 +16,11 @@ const composer = document.querySelector("#composer");
 const prompt = document.querySelector("#prompt");
 const limit = document.querySelector("#limit");
 const send = document.querySelector("#send");
+const sendLabel = document.querySelector("#send-label");
 const reset = document.querySelector("#reset");
 const notice = document.querySelector("#notice");
 const connection = document.querySelector("#connection");
+const count = new Intl.NumberFormat("en-US");
 let sessionId = crypto.randomUUID();
 let history = [];
 let busy = false;
@@ -120,18 +122,33 @@ function addHtmlPreview(container, text, tokens) {
 }
 
 function showMetrics(container, metrics) {
-  const summary = document.createElement("p");
+  const summary = document.createElement("dl");
   summary.className = "metrics";
-  summary.textContent = `${metrics.output_tokens} tokens · Decode ${metrics.decode_tok_s.toFixed(1)} tokens/s`
-    + ` · First token ${metrics.ttft_s.toFixed(2)} s · Reused ${metrics.cached_prompt_tokens}/${metrics.input_tokens}`
-    + ` · Verification rounds ${metrics.target_decode_passes} · ${metrics.draft_schedule}`;
+  summary.setAttribute("aria-label", "Reply performance");
+  const entries = [
+    ["Decode", `${metrics.decode_tok_s.toFixed(1)} tok/s`],
+    ["First token", `${metrics.ttft_s.toFixed(2)} s`],
+    ["Cached input", `${count.format(metrics.cached_prompt_tokens)} / ${count.format(metrics.input_tokens)}`],
+    ["Output tokens", count.format(metrics.output_tokens)],
+    ["Verification rounds", count.format(metrics.target_decode_passes)],
+    ["Draft schedule", metrics.draft_schedule],
+  ];
+  for (const [label, value] of entries) {
+    const item = document.createElement("div");
+    const term = document.createElement("dt");
+    const detail = document.createElement("dd");
+    term.textContent = label;
+    detail.textContent = value;
+    item.append(term, detail);
+    summary.append(item);
+  }
   container.append(summary);
 }
 
-function setBusy(value) {
-  busy = value;
+function setBusy(activity = "") {
+  busy = Boolean(activity);
   send.disabled = reset.disabled = busy;
-  send.textContent = busy ? "Generating…" : "Send";
+  sendLabel.textContent = activity || "Send";
 }
 
 composer.addEventListener("submit", async (event) => {
@@ -140,7 +157,7 @@ composer.addEventListener("submit", async (event) => {
   if (busy || !input || !composer.reportValidity()) return;
   const maxTokens = limit.valueAsNumber;
   const user = { role: "user", content: input };
-  setBusy(true);
+  setBusy("Generating…");
   notice.textContent = "";
   prompt.value = "";
   welcome.hidden = true;
@@ -187,7 +204,7 @@ composer.addEventListener("submit", async (event) => {
     notice.textContent = error.message;
     if (!prompt.value && !result) prompt.value = input;
   } finally {
-    setBusy(false);
+    setBusy();
   }
 });
 
@@ -198,14 +215,16 @@ prompt.addEventListener("keydown", (event) => {
   }
 });
 
-document.querySelector("#example").addEventListener("click", () => {
-  prompt.value = "Explain two common caching strategies. Include a level-two Markdown heading, a two-row comparison table, and a short Python code block.";
-  prompt.focus();
-});
+for (const button of document.querySelectorAll(".suggestion")) {
+  button.addEventListener("click", () => {
+    prompt.value = button.dataset.prompt;
+    prompt.focus();
+  });
+}
 
 reset.addEventListener("click", async () => {
   if (busy) return;
-  setBusy(true);
+  setBusy("Resetting…");
   notice.textContent = "";
   try {
     await postChat({ reset: true });
@@ -218,7 +237,7 @@ reset.addEventListener("click", async () => {
   } catch (error) {
     notice.textContent = error.message;
   } finally {
-    setBusy(false);
+    setBusy();
   }
 });
 
@@ -227,11 +246,13 @@ async function checkConnection() {
     const response = await fetch("/healthz");
     if (!response.ok) throw new Error();
     const health = await response.json();
+    if (!health.ready) throw new Error();
     document.querySelector("#model").textContent = health.model.split("/").pop();
     connection.textContent = `Local · ${health.dtype}`;
-    connection.dataset.ready = String(health.ready);
+    connection.dataset.ready = "true";
   } catch {
-    connection.textContent = "Local server unavailable";
+    connection.textContent = "Server offline";
+    connection.dataset.ready = "false";
   }
 }
 
