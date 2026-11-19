@@ -31,7 +31,7 @@ async function postChat(body) {
   });
   if (!response.ok) {
     const data = await response.json().catch(() => ({}));
-    throw new Error(data.error || `请求失败（HTTP ${response.status}）`);
+    throw new Error(data.error || `Request failed (HTTP ${response.status}).`);
   }
   return response;
 }
@@ -39,7 +39,7 @@ async function postChat(body) {
 async function streamChat(messages, maxTokens, onDelta) {
   const response = await postChat({ messages, max_tokens: maxTokens, stream: true });
   if (!response.headers.get("Content-Type")?.startsWith("application/x-ndjson") || !response.body) {
-    throw new Error("服务未返回聊天流。");
+    throw new Error("The server did not return a chat stream.");
   }
   const reader = response.body.getReader();
   const decoder = new TextDecoder();
@@ -57,7 +57,7 @@ async function streamChat(messages, maxTokens, onDelta) {
         if (event.done) return event;
         if (event.delta) onDelta(event.delta);
       }
-      if (done) throw new Error("聊天流提前结束。");
+      if (done) throw new Error("The chat stream ended early.");
     }
   } finally {
     void reader.cancel().catch(() => {});
@@ -74,7 +74,7 @@ function makeTurn(role) {
   container.className = `reply ${role}-turn`;
   const label = document.createElement("h2");
   label.className = "reply-label";
-  label.textContent = role === "user" ? "你" : "Qwen";
+  label.textContent = role === "user" ? "You" : "Qwen";
   const body = document.createElement("div");
   body.className = "reply-body";
   container.append(label, body);
@@ -101,7 +101,7 @@ function addHtmlPreview(container, text, tokens) {
     const preview = document.createElement("details");
     preview.className = "preview";
     const title = document.createElement("summary");
-    title.textContent = html.length > 1 ? `HTML 预览 ${index + 1}` : "HTML 预览";
+    title.textContent = html.length > 1 ? `HTML preview ${index + 1}` : "HTML preview";
     preview.append(title);
     preview.addEventListener("toggle", () => {
       if (!preview.open || preview.querySelector("iframe")) return;
@@ -122,16 +122,16 @@ function addHtmlPreview(container, text, tokens) {
 function showMetrics(container, metrics) {
   const summary = document.createElement("p");
   summary.className = "metrics";
-  summary.textContent = `${metrics.output_tokens} token · 解码 ${metrics.decode_tok_s.toFixed(1)} token/s`
-    + ` · 首 token ${metrics.ttft_s.toFixed(2)} s · 复用 ${metrics.cached_prompt_tokens}/${metrics.input_tokens}`
-    + ` · 验证 ${metrics.target_decode_passes} 轮 · ${metrics.draft_schedule}`;
+  summary.textContent = `${metrics.output_tokens} tokens · Decode ${metrics.decode_tok_s.toFixed(1)} tokens/s`
+    + ` · First token ${metrics.ttft_s.toFixed(2)} s · Reused ${metrics.cached_prompt_tokens}/${metrics.input_tokens}`
+    + ` · Verification rounds ${metrics.target_decode_passes} · ${metrics.draft_schedule}`;
   container.append(summary);
 }
 
 function setBusy(value) {
   busy = value;
   send.disabled = reset.disabled = busy;
-  send.textContent = busy ? "生成中…" : "发送";
+  send.textContent = busy ? "Generating…" : "Send";
 }
 
 composer.addEventListener("submit", async (event) => {
@@ -146,7 +146,7 @@ composer.addEventListener("submit", async (event) => {
   welcome.hidden = true;
   makeTurn("user").body.textContent = input;
   const reply = makeTurn("assistant");
-  reply.body.textContent = "正在生成…";
+  reply.body.textContent = "Generating…";
   reply.body.classList.add("pending");
   scrollToLatest();
 
@@ -181,7 +181,7 @@ composer.addEventListener("submit", async (event) => {
   } catch (error) {
     clearTimeout(timer);
     if (draft) paint();
-    else reply.body.textContent = "本轮未完成。";
+    else reply.body.textContent = "This turn could not be completed.";
     reply.body.classList.remove("pending");
     if (!draft) reply.body.classList.add("problem");
     notice.textContent = error.message;
@@ -199,7 +199,7 @@ prompt.addEventListener("keydown", (event) => {
 });
 
 document.querySelector("#example").addEventListener("click", () => {
-  prompt.value = "介绍两种常见的缓存策略。用一个 Markdown 二级标题、一张两行对比表，以及一个简短的 Python 代码块。";
+  prompt.value = "Explain two common caching strategies. Include a level-two Markdown heading, a two-row comparison table, and a short Python code block.";
   prompt.focus();
 });
 
@@ -228,10 +228,10 @@ async function checkConnection() {
     if (!response.ok) throw new Error();
     const health = await response.json();
     document.querySelector("#model").textContent = health.model.split("/").pop();
-    connection.textContent = `本机 · ${health.dtype}`;
+    connection.textContent = `Local · ${health.dtype}`;
     connection.dataset.ready = String(health.ready);
   } catch {
-    connection.textContent = "本机服务不可用";
+    connection.textContent = "Local server unavailable";
   }
 }
 

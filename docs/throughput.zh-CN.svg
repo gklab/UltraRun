@@ -1,0 +1,45 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="900" height="330" viewBox="0 0 900 330" role="img" aria-labelledby="title description">
+  <title id="title">M2 Ultra 代码续写的解码吞吐</title>
+  <desc id="description">4096 输入、1024 输出，HTTP 历史实测。参考配置 11.32、早期优化 32.47、MTP 投影缓存 39.50、候选路径排序 43.99、DeltaNet 预填充 44.80、异步验证 42.06 token/s。</desc>
+  <rect x="0.5" y="0.5" width="899" height="329" rx="14" fill="#f8fafc" stroke="#cbd5e1"/>
+  <g fill="#475569" font-family="system-ui, 'PingFang SC', 'Noto Sans CJK SC', sans-serif" font-size="15">
+    <text x="30" y="35" font-weight="600">解码吞吐 (token/s)</text>
+    <g fill="none" stroke="#d9e2ec">
+      <path d="M63 62H866 M63 104H866 M63 146H866 M63 188H866 M63 230H866"/>
+      <path d="M63 62V272H866" stroke="#94a3b8"/>
+    </g>
+    <g text-anchor="end" dominant-baseline="middle" font-variant-numeric="tabular-nums">
+      <text x="50" y="62">50</text>
+      <text x="50" y="104">40</text>
+      <text x="50" y="146">30</text>
+      <text x="50" y="188">20</text>
+      <text x="50" y="230">10</text>
+      <text x="50" y="272">0</text>
+    </g>
+    <g text-anchor="middle">
+      <text x="96" y="305">参考配置</text>
+      <text x="238" y="305">早期优化</text>
+      <text x="380" y="305">MTP 投影缓存</text>
+      <text x="522" y="305">候选路径排序</text>
+      <text x="664" y="305">DeltaNet 预填充</text>
+      <text x="806" y="305">异步验证</text>
+    </g>
+  </g>
+  <polyline points="96,224.46 238,135.63 380,106.10 522,87.24 664,83.84 806,95.35" fill="none" stroke="#087e75" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>
+  <g fill="#087e75" stroke="#f8fafc" stroke-width="2">
+    <circle cx="96" cy="224.46" r="5"/>
+    <circle cx="238" cy="135.63" r="5"/>
+    <circle cx="380" cy="106.10" r="5"/>
+    <circle cx="522" cy="87.24" r="5"/>
+    <circle cx="664" cy="83.84" r="5"/>
+    <circle cx="806" cy="95.35" r="5"/>
+  </g>
+  <g fill="#075e58" stroke="#f8fafc" stroke-width="4" paint-order="stroke" font-family="system-ui, sans-serif" font-size="17" font-weight="700" text-anchor="middle">
+    <text x="96" y="207">11.32</text>
+    <text x="238" y="119">32.47</text>
+    <text x="380" y="89">39.50</text>
+    <text x="522" y="70">43.99</text>
+    <text x="664" y="67">44.80</text>
+    <text x="806" y="78">42.06</text>
+  </g>
+</svg>

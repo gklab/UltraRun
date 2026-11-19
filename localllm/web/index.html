@@ -1,9 +1,9 @@
 <!doctype html>
-<html lang="zh-CN">
+<html lang="en">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>UltraRun · 本地对话</title>
+  <title>UltraRun · Local chat</title>
   <link rel="stylesheet" href="/chat-ui.css">
   <script defer src="/markdown-it.min.js"></script>
   <script defer src="/chat-ui.js"></script>
@@ -19,29 +19,29 @@
         </div>
       </div>
       <div class="topbar-actions">
-        <span class="connection" id="connection" role="status">正在连接</span>
-        <button class="secondary" id="reset" type="button">新对话</button>
+        <span class="connection" id="connection" role="status">Connecting</span>
+        <button class="secondary" id="reset" type="button">New chat</button>
       </div>
     </div>
   </header>
   <main>
-    <section class="transcript" id="transcript" aria-label="对话记录">
+    <section class="transcript" id="transcript" aria-label="Chat transcript">
       <div class="conversation">
         <div class="welcome" id="welcome">
-          <h1>本地对话</h1>
-          <p>回复会实时显示，支持 Markdown 表格、代码块和 HTML 预览。</p>
-          <button class="secondary" id="example" type="button">试一条 Markdown 示例</button>
+          <h1>Local chat</h1>
+          <p>Responses stream as they’re generated, with support for Markdown tables, code blocks, and HTML previews.</p>
+          <button class="secondary" id="example" type="button">Try a Markdown example</button>
         </div>
         <div id="messages"></div>
       </div>
     </section>
     <div class="composer-area">
       <form id="composer">
-        <textarea id="prompt" rows="2" placeholder="给 Qwen 发消息" aria-label="消息" required></textarea>
+        <textarea id="prompt" rows="2" placeholder="Message Qwen" aria-label="Message" required></textarea>
         <div class="composer-controls">
-          <label for="limit">最大输出 <input id="limit" type="number" min="1" step="1" value="1024" required></label>
-          <span class="keyhint">Enter 发送 · Shift+Enter 换行</span>
-          <button class="primary" id="send" type="submit">发送</button>
+          <label for="limit">Max output tokens <input id="limit" type="number" min="1" step="1" value="1024" required></label>
+          <span class="keyhint">Enter to send · Shift+Enter for a new line</span>
+          <button class="primary" id="send" type="submit">Send</button>
         </div>
       </form>
       <div id="notice" role="status" aria-live="polite"></div>

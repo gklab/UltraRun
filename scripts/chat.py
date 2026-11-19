@@ -1,4 +1,4 @@
-"""在终端体验本地 Qwen 的多轮会话和增量预填充。"""
+"""Chat with a local Qwen model using streaming and incremental prefill."""
 
 import argparse
 from contextlib import contextmanager
@@ -21,14 +21,15 @@ def chat_response(port, body):
             yield response
     except HTTPError as error:
         if error.code == 404:
-            raise RuntimeError("本地服务还没有加载 /chat 接口，请重启项目的 HTTP 服务。") from error
+            raise RuntimeError("The local server has no /chat endpoint. Restart the UltraRun server.") from error
         try:
             detail = json.load(error).get("error", error.reason)
         except (AttributeError, ValueError):
             detail = error.reason
         raise RuntimeError(detail) from error
     except OSError as error:
-        raise RuntimeError(f"无法访问本地 {port} 端口：{error.reason if hasattr(error, 'reason') else error}") from error
+        detail = error.reason if hasattr(error, "reason") else error
+        raise RuntimeError(f"Could not connect to the local server on port {port} ({detail})") from error
 
 
 def post(port, body):
@@ -39,7 +40,7 @@ def post(port, body):
 def stream_chat(port, body, on_delta):
     with chat_response(port, {**body, "stream": True}) as response:
         if response.headers.get_content_type() != "application/x-ndjson":
-            raise RuntimeError("本地服务还没有加载流式聊天接口。")
+            raise RuntimeError("The local server did not return a chat stream.")
         for line in response:
             event = json.loads(line)
             if "error" in event:
@@ -47,7 +48,7 @@ def stream_chat(port, body, on_delta):
             if event.get("done"):
                 return event
             on_delta(event["delta"])
-    raise RuntimeError("聊天流在本轮完成前中断。")
+    raise RuntimeError("The chat stream ended before the turn was complete.")
 
 
 def run(port, limit, prompts):
@@ -59,17 +60,18 @@ def run(port, limit, prompts):
         messages.clear()
 
     if prompts is None:
-        print("流式聊天已启动。每轮显示服务实际使用的解码调度。/reset 新会话，/quit 退出。", flush=True)
+        print("Streaming chat is ready. Each turn shows the draft schedule used. /reset starts a new chat. /quit exits.",
+              flush=True)
     pending = iter(prompts) if prompts is not None else None
     try:
         while True:
             if pending is None:
-                prompt = input("\n你 > ").strip()
+                prompt = input("\nYou > ").strip()
             else:
                 prompt = next(pending, None)
                 if prompt is None:
                     break
-                print(f"\n你 > {prompt}", flush=True)
+                print(f"\nYou > {prompt}", flush=True)
             if not prompt:
                 continue
             if prompt == "/quit":
@@ -77,13 +79,13 @@ def run(port, limit, prompts):
             if prompt == "/reset":
                 try:
                     reset()
-                    print("已清空会话。", flush=True)
+                    print("Chat cleared.", flush=True)
                 except RuntimeError as error:
                     print(error, file=sys.stderr)
                 continue
             turn = {"role": "user", "content": prompt}
             try:
-                print("模型 > ", end="", flush=True)
+                print("Qwen > ", end="", flush=True)
                 response = stream_chat(port, {
                     "session_id": session_id, "messages": [*messages, turn], "max_tokens": limit,
                 }, lambda text: print(text, end="", flush=True))
@@ -95,10 +97,10 @@ def run(port, limit, prompts):
             text, stats = response["text"], response["metrics"]
             messages.extend((turn, {"role": "assistant", "content": text}))
             print()
-            print(f"  [第 {len(messages) // 2} 轮 · 复用 {stats['cached_prompt_tokens']}/{stats['input_tokens']} token"
-                  f" · 新算 {stats['prefill_tokens']} token · 首 token {stats['ttft_s']:.2f}s"
-                  f" · 解码 {stats['decode_tok_s']:.1f} token/s"
-                  f" · {stats['draft_schedule']} · 验证 {stats['target_decode_passes']} 轮]", flush=True)
+            print(f"  [Turn {len(messages) // 2} · Reused {stats['cached_prompt_tokens']}/{stats['input_tokens']} tokens"
+                  f" · Prefilled {stats['prefill_tokens']} tokens · First token {stats['ttft_s']:.2f} s"
+                  f" · Decode {stats['decode_tok_s']:.1f} tokens/s"
+                  f" · {stats['draft_schedule']} · Verification rounds {stats['target_decode_passes']}]", flush=True)
     except (EOFError, KeyboardInterrupt):
         print()
     finally:
@@ -112,12 +114,12 @@ def run(port, limit, prompts):
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--port", type=int, default=8765, help="本地 HTTP 服务端口")
-    parser.add_argument("--max-tokens", type=int, default=128, help="每轮最多生成的 token 数")
-    parser.add_argument("--prompt", action="append", help="按顺序执行一轮，可重复传入")
+    parser.add_argument("--port", type=int, default=8765, help="port of the local HTTP server")
+    parser.add_argument("--max-tokens", type=int, default=128, help="maximum output tokens per turn")
+    parser.add_argument("--prompt", action="append", help="send a prompt as one turn (repeat for multiple turns)")
     args = parser.parse_args()
     if args.max_tokens < 1 or not 1 <= args.port <= 65535:
-        parser.error("--max-tokens 必须为正整数，--port 必须在 1–65535 之间")
+        parser.error("--max-tokens must be a positive integer and --port must be between 1 and 65535")
     raise SystemExit(run(args.port, args.max_tokens, args.prompt))
 
 
