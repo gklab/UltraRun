@@ -1,18 +1,19 @@
 :root {
-  color-scheme: light;
+  color-scheme: dark;
   font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
   --mono: ui-monospace, "SF Mono", Consolas, monospace;
-  --canvas: #f6f7f4;
-  --surface: #fff;
-  --surface-muted: #eef1ec;
-  --ink: #1d2923;
-  --body: #3e4d45;
-  --muted: #56665d;
-  --line: #dce2dc;
-  --control-line: #a3b0a7;
-  --accent: #215c46;
-  --accent-hover: #174432;
-  --danger: #8f3030;
+  --canvas: #111116;
+  --surface: #19191f;
+  --surface-muted: #23232a;
+  --ink: #f5efdf;
+  --body: #e0dacd;
+  --muted: #aca79d;
+  --line: #37363e;
+  --control-line: #716f78;
+  --accent: #ffb416;
+  --accent-hover: #ffc24a;
+  --accent-ink: #211602;
+  --danger: #ffa39c;
   --column: 784px;
   --gutter: clamp(16px, 5vw, 40px);
   color: var(--ink);
@@ -53,15 +54,8 @@ button:disabled { cursor: default; opacity: .58; }
 .brand strong, .model { display: block; }
 .brand strong { font-size: 15px; font-weight: 650; }
 .brand-mark {
-  display: grid;
-  place-items: center;
-  inline-size: 36px;
-  block-size: 36px;
+  display: block;
   flex: none;
-  border-radius: 8px;
-  color: #fff;
-  background: var(--accent);
-  font: 600 17px var(--mono);
 }
 .model { margin-top: 3px; color: var(--muted); font: 12px var(--mono); }
 .connection {
@@ -101,7 +95,7 @@ button:disabled { cursor: default; opacity: .58; }
   justify-content: center;
   align-items: center;
   gap: 8px;
-  color: white;
+  color: var(--accent-ink);
   background: var(--accent);
   border-color: var(--accent);
 }
@@ -192,7 +186,6 @@ button:disabled { cursor: default; opacity: .58; }
   border: 1px solid var(--control-line);
   border-radius: 16px;
   background: var(--surface);
-  box-shadow: 0 2px 6px rgb(29 41 35 / .04);
 }
 #composer:focus-within { border-color: var(--accent); }
 #composer:has(#prompt:focus-visible) {
@@ -252,7 +245,7 @@ kbd { padding: 2px 4px; border: 1px solid var(--line); border-radius: 4px; font:
 @media (max-width: 380px) {
   .model, .connection { font-size: 11px; }
   .topbar-inner { padding-inline: 12px; }
-  .brand-mark { inline-size: 28px; block-size: 28px; }
+  .brand-mark { inline-size: 32px; block-size: 32px; }
   .secondary { padding-inline: 8px; }
   .plus, .token-label { display: none; }
 }

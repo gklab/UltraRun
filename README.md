@@ -1,4 +1,4 @@
-# UltraRun
+# <img src="ultrarun/web/logo.png" width="52" height="52" alt=""> UltraRun
 
 <a href="README.md" lang="en" aria-current="page"><kbd><strong>English</strong></kbd></a> · <a href="README.zh-CN.md" lang="zh-CN"><kbd>中文</kbd></a>
 

@@ -22,6 +22,7 @@ from .spec_tree import VerificationTree
 WEB_DIR = Path(__file__).with_name("web")
 WEB_ASSETS = {
     "/": ("index.html", "text/html; charset=utf-8"),
+    "/logo.png": ("logo.png", "image/png"),
     "/chat-ui.css": ("chat.css", "text/css; charset=utf-8"),
     "/chat-ui.js": ("chat.js", "text/javascript; charset=utf-8"),
     "/markdown-it.min.js": ("markdown-it.min.js", "text/javascript; charset=utf-8"),
@@ -89,7 +90,7 @@ class Handler(BaseHTTPRequestHandler):
                 self.send_header(
                     "Content-Security-Policy",
                     "default-src 'none'; script-src 'self'; style-src 'self' 'unsafe-inline'; "
-                    "img-src data:; connect-src 'self'; frame-src 'self' about:; "
+                    "img-src 'self' data:; connect-src 'self'; frame-src 'self' about:; "
                     "base-uri 'none'; form-action 'none'; frame-ancestors 'none'",
                 )
             self.end_headers()
