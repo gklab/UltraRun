@@ -10,10 +10,10 @@ from time import perf_counter
 
 import mlx.core as mx
 
-from localllm.host import thermal_state
-from localllm.memory import GIB, metal_job
-from localllm.server import warm_verification_graphs
-from localllm.spec_tree import VerificationTree, accepted_path
+from ultrarun.host import thermal_state
+from ultrarun.memory import GIB, metal_job
+from ultrarun.server import warm_verification_graphs
+from ultrarun.spec_tree import VerificationTree, accepted_path
 from scripts.bench_dflash2 import (
     SOURCE_SHA256, bind_draft, load_draft, load_target, observe_layers, pages, prefill, tiled_candidates,
 )

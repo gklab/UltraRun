@@ -12,12 +12,12 @@ from types import FunctionType
 
 import mlx.core as mx
 
-from localllm.delta import DeltaRollback, recurrent
-from localllm.host import thermal_state
-from localllm.memory import GIB, metal_job
-from localllm.server import warm_verification_graphs
-from localllm.spec_tree import VerificationTree
-from localllm.tree_schedule import order_for_slots, slot_plan
+from ultrarun.delta import DeltaRollback, recurrent
+from ultrarun.host import thermal_state
+from ultrarun.memory import GIB, metal_job
+from ultrarun.server import warm_verification_graphs
+from ultrarun.spec_tree import VerificationTree
+from ultrarun.tree_schedule import order_for_slots, slot_plan
 from scripts.bench_delta_checkpoint import activation_batch
 from scripts.bench_dflash2 import SOURCE_SHA256, bind_draft, load_draft, load_target, pages, prefill, tiled_candidates
 from scripts.bench_dflash2_packed import fork_site_allocator, pack_variants

@@ -34,7 +34,7 @@ Requires Apple Silicon, ARM64 Python 3.13, about 56 GB of disk space for the dow
 uv venv --python 3.13 .venv
 uv pip install --python .venv/bin/python -r requirements.txt
 .venv/bin/python scripts/download.py
-.venv/bin/python -m localllm.server --port 8765 --profile optimized --draft-schedule frontier_prefetch
+.venv/bin/python -m ultrarun.server --port 8765 --profile optimized --draft-schedule frontier_prefetch
 ```
 
 The downloader supports resuming and checks all 18 weight shards against the SHA-256 manifest. To download the weight shards from ModelScope, run `.venv/bin/python scripts/download.py --source modelscope`.
@@ -54,9 +54,9 @@ The optimized profile uses native MTP to draft candidates and the BF16 target mo
 Stop the service before benchmarking. Both acquire the same Metal workspace lock.
 
 ```sh
-.venv/bin/python -m localllm.cli verify-kernel
-.venv/bin/python -m localllm.cli verify-model
-.venv/bin/python -m localllm.cli bench --runs 3 --jsonl runs/baseline.jsonl
+.venv/bin/python -m ultrarun.cli verify-kernel
+.venv/bin/python -m ultrarun.cli verify-model
+.venv/bin/python -m ultrarun.cli bench --runs 3 --jsonl runs/baseline.jsonl
 .venv/bin/python scripts/tune.py baseline frontierprefetch11
 ```
 

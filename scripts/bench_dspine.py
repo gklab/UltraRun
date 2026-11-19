@@ -11,10 +11,10 @@ from types import SimpleNamespace
 import mlx.core as mx
 from mlx import nn
 
-from localllm.lossless_gate_up import LosslessPaired, encode_paired, unpack_joint
-from localllm.lossless_projection import decoded_bits, encode_down
-from localllm.memory import GIB, metal_job
-from localllm.packed_projection import pack_activations, pack_weight
+from ultrarun.lossless_gate_up import LosslessPaired, encode_paired, unpack_joint
+from ultrarun.lossless_projection import decoded_bits, encode_down
+from ultrarun.memory import GIB, metal_job
+from ultrarun.packed_projection import pack_activations, pack_weight
 from scripts.bench_ready import DraftContext, ROOT, benchmark_target, decode, linear, prepare_prefix
 
 

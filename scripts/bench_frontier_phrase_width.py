@@ -8,7 +8,7 @@ import math
 from pathlib import Path
 from statistics import median
 
-from localllm.phrase_history import PhraseHistory
+from ultrarun.phrase_history import PhraseHistory
 
 
 ROOT = Path(__file__).resolve().parents[1]

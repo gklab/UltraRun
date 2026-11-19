@@ -5,8 +5,8 @@ import json
 
 import mlx.core as mx
 
-from localllm.host import thermal_state
-from localllm.memory import GIB, metal_job
+from ultrarun.host import thermal_state
+from ultrarun.memory import GIB, metal_job
 from scripts.bench_dflash2 import pages
 from scripts.bench_dspine import (
     DSpineDraft, ROOT, verify_checkpoint, with_packed_ffn, with_packed_projections, with_prompt_vocabulary,

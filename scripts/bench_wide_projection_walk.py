@@ -10,11 +10,11 @@ from time import perf_counter
 
 import mlx.core as mx
 
-from localllm import lossless_gate_up as gate
-from localllm import lossless_projection as down
-from localllm.host import thermal_state
-from localllm.memory import GIB, metal_job
-from localllm.packed_projection import pack_activations, pack_weight
+from ultrarun import lossless_gate_up as gate
+from ultrarun import lossless_projection as down
+from ultrarun.host import thermal_state
+from ultrarun.memory import GIB, metal_job
+from ultrarun.packed_projection import pack_activations, pack_weight
 from scripts.bench_dflash2 import pages
 from scripts.bench_ready import TARGET
 from scripts.bench_verbatim_ffn import replace_once

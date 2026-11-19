@@ -1,4 +1,4 @@
-"""Benchmark a native MLX ReaDy drafter with the exact BF16 LocalLLM verifier."""
+"""Benchmark a native MLX ReaDy drafter with the exact BF16 UltraRun verifier."""
 
 import argparse
 from collections import Counter
@@ -13,12 +13,12 @@ from types import SimpleNamespace
 import mlx.core as mx
 from mlx import nn
 
-from localllm.memory import GIB, metal_job
-from localllm.model import Model
-from localllm.packed_projection import pack_activations
-from localllm.profiles import OPTIMIZED_MODEL
-from localllm.server import warm_verification_graphs
-from localllm.spec_tree import VerificationTree, accepted_path
+from ultrarun.memory import GIB, metal_job
+from ultrarun.model import Model
+from ultrarun.packed_projection import pack_activations
+from ultrarun.profiles import OPTIMIZED_MODEL
+from ultrarun.server import warm_verification_graphs
+from ultrarun.spec_tree import VerificationTree, accepted_path
 from scripts.bench_dflash2 import observe_layers, pages, prefill, read_thermal_state
 
 

@@ -9,8 +9,8 @@ from types import SimpleNamespace
 
 import mlx.core as mx
 
-from localllm.host import thermal_state
-from localllm.memory import GIB, metal_job
+from ultrarun.host import thermal_state
+from ultrarun.memory import GIB, metal_job
 from scripts.audit_dspine_complement import capture_target_suffix
 from scripts.bench_dflash2 import pages, prefill
 from scripts.bench_ready import ROOT, benchmark_target

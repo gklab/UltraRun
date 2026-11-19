@@ -11,14 +11,14 @@ from time import perf_counter
 
 import mlx.core as mx
 
-from localllm import lossless_gate_up as gates, lossless_projection as down
-from localllm.host import thermal_state
-from localllm.memory import GIB, metal_job
-from localllm.model import Model
-from localllm.packed_projection import pack_activations
-from localllm.profiles import OPTIMIZED_MODEL
-from localllm.server import warm_verification_graphs
-from localllm.spec_tree import VerificationTree
+from ultrarun import lossless_gate_up as gates, lossless_projection as down
+from ultrarun.host import thermal_state
+from ultrarun.memory import GIB, metal_job
+from ultrarun.model import Model
+from ultrarun.packed_projection import pack_activations
+from ultrarun.profiles import OPTIMIZED_MODEL
+from ultrarun.server import warm_verification_graphs
+from ultrarun.spec_tree import VerificationTree
 from scripts.bench_dflash2 import pages
 from scripts.bench_ready import ROOT, TARGET, digest
 from scripts.bench_verify_buffer_limits import partition_prompt

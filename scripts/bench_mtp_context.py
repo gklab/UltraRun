@@ -11,14 +11,14 @@ from unittest.mock import patch
 
 import mlx.core as mx
 
-from localllm import cli
-from localllm.draft_short_head import prepare_short_head
-from localllm.host import thermal_state
-from localllm.logical_attention import logical_attention
-from localllm.memory import GIB, metal_job
-from localllm.model import Model
-from localllm.profiles import OPTIMIZED_DRAFT, OPTIMIZED_MODEL
-from localllm.server import warm_verification_graphs
+from ultrarun import cli
+from ultrarun.draft_short_head import prepare_short_head
+from ultrarun.host import thermal_state
+from ultrarun.logical_attention import logical_attention
+from ultrarun.memory import GIB, metal_job
+from ultrarun.model import Model
+from ultrarun.profiles import OPTIMIZED_DRAFT, OPTIMIZED_MODEL
+from ultrarun.server import warm_verification_graphs
 from scripts.bench_dflash2 import pages
 from scripts.bench_ready import ROOT, TARGET, digest
 

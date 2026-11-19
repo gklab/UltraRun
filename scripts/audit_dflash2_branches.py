@@ -8,9 +8,9 @@ from time import perf_counter
 
 import mlx.core as mx
 
-from localllm.memory import GIB, metal_job
-from localllm.server import warm_verification_graphs
-from localllm.spec_tree import VerificationTree
+from ultrarun.memory import GIB, metal_job
+from ultrarun.server import warm_verification_graphs
+from ultrarun.spec_tree import VerificationTree
 from scripts.bench_dflash2 import ROOT, bind_draft, load_draft, load_target, observe_layers, pages, prefill
 
 

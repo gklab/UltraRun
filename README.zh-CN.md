@@ -34,7 +34,7 @@
 uv venv --python 3.13 .venv
 uv pip install --python .venv/bin/python -r requirements.txt
 .venv/bin/python scripts/download.py
-.venv/bin/python -m localllm.server --port 8765 --profile optimized --draft-schedule frontier_prefetch
+.venv/bin/python -m ultrarun.server --port 8765 --profile optimized --draft-schedule frontier_prefetch
 ```
 
 下载支持断点续传，18 个权重分片均按 SHA-256 清单校验。可用 `scripts/download.py --source modelscope` 从 ModelScope 下载权重分片。
@@ -54,9 +54,9 @@ uv pip install --python .venv/bin/python -r requirements.txt
 退出服务后运行基准，服务和基准共用 Metal 工作区锁。
 
 ```sh
-.venv/bin/python -m localllm.cli verify-kernel
-.venv/bin/python -m localllm.cli verify-model
-.venv/bin/python -m localllm.cli bench --runs 3 --jsonl runs/baseline.jsonl
+.venv/bin/python -m ultrarun.cli verify-kernel
+.venv/bin/python -m ultrarun.cli verify-model
+.venv/bin/python -m ultrarun.cli bench --runs 3 --jsonl runs/baseline.jsonl
 .venv/bin/python scripts/tune.py baseline frontierprefetch11
 ```
 

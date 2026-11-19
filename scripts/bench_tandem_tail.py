@@ -9,9 +9,9 @@ from pathlib import Path
 
 import mlx.core as mx
 
-from localllm.host import thermal_state
-from localllm.memory import GIB, metal_job
-from localllm.server import warm_verification_graphs
+from ultrarun.host import thermal_state
+from ultrarun.memory import GIB, metal_job
+from ultrarun.server import warm_verification_graphs
 from scripts.bench_dflash2 import ROOT, bind_draft, load_draft, load_target, pages, prefill, tiled_candidates
 from scripts.bench_dflash2_packed import fork_site_allocator, fork_site_runner, pack_variants, trimmed_output
 from scripts.bench_dflash2_tandem import draft_runner, exercise, streams_at_prefix, verified_directories

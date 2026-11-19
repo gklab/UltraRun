@@ -10,10 +10,10 @@ from time import perf_counter
 
 import mlx.core as mx
 
-from localllm.delta import DeltaRollback, recurrent
-from localllm.host import thermal_state
-from localllm.memory import GIB, metal_job
-from localllm.spec_tree import VerificationTree
+from ultrarun.delta import DeltaRollback, recurrent
+from ultrarun.host import thermal_state
+from ultrarun.memory import GIB, metal_job
+from ultrarun.spec_tree import VerificationTree
 from scripts.bench_dflash2 import pages
 
 

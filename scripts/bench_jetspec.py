@@ -10,9 +10,9 @@ from time import perf_counter
 import mlx.core as mx
 from mlx.utils import tree_flatten
 
-from localllm.memory import GIB, metal_job
-from localllm.packed_projection import pack_activations
-from localllm.server import warm_verification_graphs
+from ultrarun.memory import GIB, metal_job
+from ultrarun.packed_projection import pack_activations
+from ultrarun.server import warm_verification_graphs
 from scripts.bench_dflash2 import ROOT, decode, load_target, prefill, upstream_module
 
 

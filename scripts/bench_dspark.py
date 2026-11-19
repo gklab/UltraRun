@@ -12,9 +12,9 @@ from types import SimpleNamespace
 import mlx.core as mx
 from mlx import nn
 
-from localllm.host import thermal_state
-from localllm.memory import GIB, metal_job
-from localllm.packed_projection import pack_activations
+from ultrarun.host import thermal_state
+from ultrarun.memory import GIB, metal_job
+from ultrarun.packed_projection import pack_activations
 from scripts.audit_dspine_complement import capture_mtp
 from scripts.bench_dflash2 import pages, prefill
 from scripts.bench_ready import DraftContext, ROOT, benchmark_target, decode, linear, norm
@@ -45,7 +45,7 @@ class DSparkDraft(DraftContext):
         assert saved["draft_vocab_size"] == config.vocab_size
         assert config.rope_parameters["rope_type"] == "default"
         assert config.rope_parameters["partial_rotary_factor"] == 1.0
-        # Speculators counts completed target layers. LocalLLM observes their zero-based outputs.
+        # Speculators counts completed target layers. UltraRun observes their zero-based outputs.
         config.target_layer_ids = [i - 1 for i in saved["aux_hidden_state_layer_ids"]]
         config.mask_token_id = saved["mask_token_id"]
         config.block_size = saved["block_size"]

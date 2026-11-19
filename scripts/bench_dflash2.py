@@ -20,12 +20,12 @@ import mlx.core as mx
 from mlx import nn
 from mlx.utils import tree_flatten
 
-from localllm.memory import GIB, metal_job
-from localllm.model import Model
-from localllm.packed_projection import pack_activations
-from localllm.profiles import OPTIMIZED_MODEL
-from localllm.server import warm_verification_graphs
-from localllm.spec_tree import VerificationTree
+from ultrarun.memory import GIB, metal_job
+from ultrarun.model import Model
+from ultrarun.packed_projection import pack_activations
+from ultrarun.profiles import OPTIMIZED_MODEL
+from ultrarun.server import warm_verification_graphs
+from ultrarun.spec_tree import VerificationTree
 from scripts.dflash2_top16 import bounded_top16, probe_top16
 
 

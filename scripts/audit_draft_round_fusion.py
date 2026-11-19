@@ -159,9 +159,9 @@ def replay(native, candidates):
 def profile_tandem(trace):
     import mlx.core as mx
 
-    from localllm.host import thermal_state
-    from localllm.memory import GIB, metal_job
-    from localllm.server import warm_verification_graphs
+    from ultrarun.host import thermal_state
+    from ultrarun.memory import GIB, metal_job
+    from ultrarun.server import warm_verification_graphs
     from scripts.audit_dflash2_branches import conditional_ranks
     from scripts.audit_dspine_complement import capture_target_suffix
     from scripts.bench_dflash2 import bind_draft, load_draft, load_target, pages, prefill, tiled_candidates

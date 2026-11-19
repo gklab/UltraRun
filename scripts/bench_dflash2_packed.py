@@ -11,11 +11,11 @@ from pathlib import Path
 
 import mlx.core as mx
 
-from localllm.host import thermal_state
-from localllm.lossless_gate_up import LosslessPaired, unpack_joint
-from localllm.memory import GIB, metal_job
-from localllm.packed_projection import pack_activations, pack_weight
-from localllm.server import warm_verification_graphs
+from ultrarun.host import thermal_state
+from ultrarun.lossless_gate_up import LosslessPaired, unpack_joint
+from ultrarun.memory import GIB, metal_job
+from ultrarun.packed_projection import pack_activations, pack_weight
+from ultrarun.server import warm_verification_graphs
 from scripts.bench_dflash2 import ROOT, bind_draft, load_draft, load_target, pages, prefill, tiled_candidates
 from scripts.bench_dflash2_tandem import draft_runner, exercise, reference, streams_at_prefix, verified_directories
 from scripts.bench_dspine import checked_paired, checked_split_k, paired_rows

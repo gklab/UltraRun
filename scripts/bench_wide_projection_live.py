@@ -7,9 +7,9 @@ from time import perf_counter
 
 import mlx.core as mx
 
-from localllm.host import thermal_state
-from localllm.memory import GIB, metal_job
-from localllm.spec_tree import VerificationTree
+from ultrarun.host import thermal_state
+from ultrarun.memory import GIB, metal_job
+from ultrarun.spec_tree import VerificationTree
 from scripts.bench_dflash2 import bind_draft, load_draft, load_target, pages, prefill, tiled_candidates
 from scripts.bench_ready import ROOT
 from scripts.bench_wide_projection_walk import walking_projection

@@ -8,7 +8,7 @@ import sys
 
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
-from localllm.profiles import OPTIMIZED_DRAFT, OPTIMIZED_MODEL
+from ultrarun.profiles import OPTIMIZED_DRAFT, OPTIMIZED_MODEL
 CANDIDATES = {
     "baseline": [],
     "merged": ["--merge"],
@@ -140,7 +140,7 @@ def main():
     best = None
     for name in selected:
         print(f"Running {name}", flush=True)
-        cmd = [sys.executable, "-m", "localllm.cli", "--model", str(args.model),
+        cmd = [sys.executable, "-m", "ultrarun.cli", "--model", str(args.model),
                *memory_args,
                *CANDIDATES[name], "bench", *input_args]
         try:

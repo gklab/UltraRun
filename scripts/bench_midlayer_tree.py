@@ -58,10 +58,10 @@ def shortlist(parents, path):
 def gpu_probe(traces):
     import mlx.core as mx
 
-    from localllm.host import thermal_state
-    from localllm.memory import GIB, metal_job
-    from localllm.model import VERIFY_SUBMISSION_LAYERS
-    from localllm.spec_tree import VerificationTree, accepted_path
+    from ultrarun.host import thermal_state
+    from ultrarun.memory import GIB, metal_job
+    from ultrarun.model import VERIFY_SUBMISSION_LAYERS
+    from ultrarun.spec_tree import VerificationTree, accepted_path
     from scripts.bench_dflash2 import pages
     from scripts.bench_ready import benchmark_target
     from scripts.bench_verify_buffer_limits import partition_prompt

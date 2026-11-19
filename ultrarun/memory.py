@@ -37,7 +37,7 @@ def metal_job(limit_gib, cache_gib):
         try:
             fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
         except BlockingIOError as error:
-            raise MemoryBudgetError("A LocalLLM service or benchmark already owns the Metal workspace.") from error
+            raise MemoryBudgetError("An UltraRun service or benchmark already owns the Metal workspace.") from error
         budget = MemoryBudget(limit_gib, cache_gib)
         budget.check(force=True)
         try:

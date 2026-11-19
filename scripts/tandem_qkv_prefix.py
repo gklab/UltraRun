@@ -5,8 +5,8 @@ import inspect
 
 import mlx.core as mx
 
-from localllm import lossless_gate_up as paired
-from localllm.packed_projection import pack_activations
+from ultrarun import lossless_gate_up as paired
+from ultrarun.packed_projection import pack_activations
 from scripts.bench_verbatim_ffn import replace_once
 
 

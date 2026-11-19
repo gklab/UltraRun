@@ -11,15 +11,15 @@ from unittest.mock import patch
 
 import mlx.core as mx
 
-from localllm import cli
-from localllm.draft_short_head import prepare_short_head
-from localllm.draft_vocab_prefetch import DraftVocabPrefetch
-from localllm.host import thermal_state
-from localllm.memory import GIB, metal_job
-from localllm.model import Model
-from localllm.profiles import OPTIMIZED_DRAFT, OPTIMIZED_MODEL
-from localllm.server import warm_verification_graphs
-from localllm.spec_tree import VerificationTree
+from ultrarun import cli
+from ultrarun.draft_short_head import prepare_short_head
+from ultrarun.draft_vocab_prefetch import DraftVocabPrefetch
+from ultrarun.host import thermal_state
+from ultrarun.memory import GIB, metal_job
+from ultrarun.model import Model
+from ultrarun.profiles import OPTIMIZED_DRAFT, OPTIMIZED_MODEL
+from ultrarun.server import warm_verification_graphs
+from ultrarun.spec_tree import VerificationTree
 from scripts.bench_dflash2 import pages
 from scripts.bench_ready import ROOT, TARGET, digest
 

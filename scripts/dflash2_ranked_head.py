@@ -7,8 +7,8 @@ from time import perf_counter
 
 import mlx.core as mx
 
-from localllm.lossless_vocabulary import VocabularyOrder
-from localllm.packed_projection import pack_activations
+from ultrarun.lossless_vocabulary import VocabularyOrder
+from ultrarun.packed_projection import pack_activations
 from scripts.bench_dflash2_tandem import reference
 from scripts.bench_verbatim_ffn import replace_once
 from scripts.dflash2_top16 import bounded_top16, mapped_top16, reference_top16

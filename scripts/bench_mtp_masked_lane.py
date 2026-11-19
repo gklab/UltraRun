@@ -14,13 +14,13 @@ from unittest.mock import patch
 
 import mlx.core as mx
 
-from localllm import cli, frontier, model as modeling
-from localllm.draft_projection import CAPACITY, FLOAT4, continue_lane_prefix, multi_gemv
-from localllm.draft_short_head import prepare_short_head
-from localllm.host import thermal_state
-from localllm.memory import GIB, metal_job
-from localllm.profiles import OPTIMIZED_DRAFT, OPTIMIZED_MODEL
-from localllm.server import warm_verification_graphs
+from ultrarun import cli, frontier, model as modeling
+from ultrarun.draft_projection import CAPACITY, FLOAT4, continue_lane_prefix, multi_gemv
+from ultrarun.draft_short_head import prepare_short_head
+from ultrarun.host import thermal_state
+from ultrarun.memory import GIB, metal_job
+from ultrarun.profiles import OPTIMIZED_DRAFT, OPTIMIZED_MODEL
+from ultrarun.server import warm_verification_graphs
 from scripts.bench_dflash2 import pages
 from scripts.bench_dflash2_tandem import exercise
 from scripts.bench_ready import ROOT, TARGET, digest

@@ -11,13 +11,13 @@ from unittest.mock import patch
 
 import mlx.core as mx
 
-from localllm import cli, frontier
-from localllm.draft_short_head import prepare_short_head
-from localllm.host import thermal_state
-from localllm.memory import GIB, metal_job
-from localllm.model import Model
-from localllm.profiles import OPTIMIZED_DRAFT, OPTIMIZED_MODEL
-from localllm.server import warm_verification_graphs
+from ultrarun import cli, frontier
+from ultrarun.draft_short_head import prepare_short_head
+from ultrarun.host import thermal_state
+from ultrarun.memory import GIB, metal_job
+from ultrarun.model import Model
+from ultrarun.profiles import OPTIMIZED_DRAFT, OPTIMIZED_MODEL
+from ultrarun.server import warm_verification_graphs
 from scripts.bench_dflash2 import pages
 from scripts.bench_frontier_phrase_width import (
     HOT_PRICE, NARROW, RecentWidthPrice, candidates, fit_phrase_table, phrase_features, propose_prune,
