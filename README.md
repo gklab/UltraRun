@@ -13,25 +13,9 @@
 
 Run the original [Qwen3.8-27B BF16](https://huggingface.co/Qwen/Qwen3.8-27B/tree/37561816e66b5b9153b1b64c10968c18c1e6f4a0) safetensors weights with MLX and custom Metal kernels. UltraRun streams chat responses in the browser and terminal.
 
-**M2 Ultra · 4,096 uncached input tokens · 11.42 s to first token · 50.85 tokens/s streaming decode.**
+**M2 Ultra benchmarks reached 51.63 tokens/s in Chinese streaming chat and 0.45 s to first token on a follow-up turn with prefix reuse.**
 
 ## Performance
-
-### 4K prefill
-
-The optimized profile on Apple M2 Ultra with MLX 0.32.4 uses grouped FFN projections, fused DeltaNet prefill, and batched submission of the existing 512-token full-attention blocks. Gate/up and DeltaNet input projections use lossless operand conversion where the runtime can recover the original BF16 values. MTP prompt priming writes only the K/V cache needed by subsequent drafts.
-
-| Measurement | Result |
-| --- | ---: |
-| Target prefill, per-block vs. per-layer attention submission | 11.61 → **11.29 s** (2.8% lower) |
-| MTP prompt priming, full draft vs. K/V-only | 74.0 → **67.1 ms** |
-| Time to first token, complete streaming request | **11.42 s** |
-| Streaming decode throughput | **50.85 tokens/s** |
-| Peak MLX memory for the streaming request | **41.63 GiB** |
-
-The streaming request used a Chinese technical-report prompt, 4,096 uncached input tokens, and 1,024 output tokens. The BF16 target and native MTP were resident, the hardware reported `nominal` thermal state, and the request limit was 45.79 GiB. Swap reads and writes were zero. A separate run at `fair` reached 11.45 s to first token and 50.88 tokens/s. Both streams matched all 1,024 reference tokens.
-
-The attention A/B used the same resident model and prompt in A/B/B/A order. Prompt hidden states, target and MTP caches, and the first token matched bit for bit. Target prefill is timed separately from MTP priming and first-token scoring.
 
 ### Code completion throughput
 
@@ -43,13 +27,14 @@ Each point shows a historical HTTP measurement on M2 Ultra with the same code wo
 
 | Workload | Input tokens | Output tokens | Decode (tokens/s) | Time to first token | Verification rounds |
 | --- | ---: | ---: | ---: | ---: | ---: |
+| Offline streaming · Chinese technical report, uncached | 4,096 | 1,024 | 50.85 | 11.42 s | 213 |
 | HTTP · Chinese technical report | 4,096 | 1,024 | 51.31 | 13.17 s | 213 |
 | HTTP · Code completion | 4,096 | 1,024 | 44.80 | 13.49 s | 241 |
 | HTTP · English technical tutorial | 4,096 | 1,024 | 38.26 | 14.50 s | 271 |
 | Streaming chat · First turn in Chinese | 4,096 | 1,024 | **51.63** | — | 213 |
 | Streaming chat · Follow-up with 5,119 reused input tokens | 5,140 | — | — | **0.45 s** | — |
 
-Decode throughput measures generation after the first token. The three HTTP workloads were measured together, with a peak of **41.50 GiB** and a `fair` thermal state throughout. The chat results came from a separate session. See the [benchmark archive (Chinese)](https://github.com/gklab/UltraRun/blob/52888611824d34b4b2f030ef74c414b7bd10f532/README.md#性能基准) and the [streaming chat measurements (Chinese)](https://github.com/gklab/UltraRun/blob/52888611824d34b4b2f030ef74c414b7bd10f532/README.md#L45).
+Decode throughput measures generation after the first token. The offline streaming run used a resident BF16 model, peaked at 41.63 GiB of MLX memory, and matched all 1,024 reference tokens. The three HTTP workloads were measured together, with a peak of **41.50 GiB** and a `fair` thermal state throughout. The chat results came from a separate session. See the [benchmark archive (Chinese)](https://github.com/gklab/UltraRun/blob/52888611824d34b4b2f030ef74c414b7bd10f532/README.md#性能基准) and the [streaming chat measurements (Chinese)](https://github.com/gklab/UltraRun/blob/52888611824d34b4b2f030ef74c414b7bd10f532/README.md#L45).
 
 ## Quick start
 
