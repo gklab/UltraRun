@@ -13,9 +13,25 @@
 
 直接加载 [Qwen3.8-27B BF16](https://huggingface.co/Qwen/Qwen3.8-27B/tree/37561816e66b5b9153b1b64c10968c18c1e6f4a0) 原版 safetensors 权重，通过 MLX 和自定义 Metal 内核进行推理，支持网页和终端流式聊天。
 
-**M2 Ultra 实测：中文流式解码 51.63 token/s，复用会话前缀时首 token 为 0.45 秒。**
+**M2 Ultra 实测，4096 个无缓存输入 token，11.42 秒出首 token，流式解码 50.85 token/s。**
 
 ## 性能
+
+### 4K 预填充
+
+M2 Ultra 上的优化配置使用 MLX 0.32.4，对 FFN 投影分组，融合 DeltaNet 预填充算子，并将全注意力原有的 512-token 分块按层合并提交。Gate/up 和 DeltaNet 输入投影仅在可以精确恢复原 BF16 值时使用无损操作数转换。MTP 提示词预热只写入后续草拟需要的 K/V 缓存。
+
+| 指标 | 结果 |
+| --- | ---: |
+| 主模型预填充，全注意力逐块提交与按层提交对照 | 11.61 → **11.29 秒**（耗时降低 2.8%） |
+| MTP 预热，完整草拟与仅写 K/V 对照 | 74.0 → **67.1 毫秒** |
+| 完整流式请求的首 token 延迟 | **11.42 秒** |
+| 流式解码吞吐 | **50.85 token/s** |
+| 流式请求的 MLX 内存峰值 | **41.63 GiB** |
+
+流式请求使用中文技术报告提示词，输入 4096 个无缓存 token，输出 1024 个 token。原版 BF16 主模型和原生 MTP 均已驻留，设备热状态为 `nominal`，请求内存上限为 45.79 GiB，swap 读写均为零。另一轮在 `fair` 状态下测得首 token 延迟 11.45 秒、解码 50.88 token/s。两轮流式回归的 1024 个输出 token 均与基准一致。
+
+注意力 A/B 共用同一模型和提示词，按 A/B/B/A 顺序测试。提示词隐藏状态、主模型和 MTP 缓存及首 token 均逐位一致。主模型预填充单独计时，MTP 预热和首 token 打分计入首 token 延迟。
 
 ### 代码续写的解码吞吐
 
@@ -66,7 +82,7 @@ uv pip install --python .venv/bin/python -r requirements.txt
 .venv/bin/python -m ultrarun.cli verify-kernel
 .venv/bin/python -m ultrarun.cli verify-model
 .venv/bin/python -m ultrarun.cli bench --runs 3 --jsonl runs/baseline.jsonl
-.venv/bin/python scripts/tune.py baseline frontierprefetch11
+.venv/bin/python scripts/tune.py baseline frontierprefetch11 fastprefill11
 ```
 
 CLI 基准默认用 Python 标准库 `inspect.py` 的前 4096 个 token 做续写，生成 1024 个 token。可通过 `--prompt-file` 指定输入。结果包含解码吞吐、端到端吞吐、首 token 延迟、内存峰值和输出 token 哈希。

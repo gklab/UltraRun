@@ -123,8 +123,9 @@ class ObservedLayer:
     def __getattr__(self, name):
         return getattr(self.layer, name)
 
-    def prefill_copy(self):
-        return ObservedLayer(self.layer.prefill_copy(), self.index, self.observer)
+    def prefill_copy(self, *, fast_prefill=False, group_ffn=False):
+        prepared = self.layer.prefill_copy(fast_prefill=fast_prefill, group_ffn=group_ffn)
+        return ObservedLayer(prepared, self.index, self.observer)
 
     def forward(self, hidden, cache, offset, *args):
         output = self.layer.forward(hidden, cache, offset, *args)

@@ -107,7 +107,7 @@ def encode_paired(raw, *, compact_descriptors=False):
 
 
 @lru_cache
-def unpack_joint_kernel(row_major, compact_descriptor=False):
+def unpack_joint_kernel(row_major, compact_descriptor=False, transposed=False, group_width=0):
     writes = r"""
         uint k_tiles = packets * 4;
         uint stride = k_tiles * 4;
@@ -125,10 +125,37 @@ def unpack_joint_kernel(row_major, compact_descriptor=False):
             raw[(base + up_offset + i) * 32 + lane] = up_pairs[i];
         }
     """
+    if transposed:
+        writes = r"""
+        uint feature = output_tile * 8 + row;
+        """
+        if group_width:
+            writes += f"""
+        constexpr uint half_width = {group_width}u;
+        uint group_start = feature / half_width * packets * 32;
+        feature %= half_width;
+            """
+        else:
+            writes += r"""
+        uint half_width = descriptor_shape[0] * 8;
+        uint group_start = 0;
+            """
+        writes += r"""
+        uint width = half_width * 2;
+        for (uint i = 0; i < 4; ++i) {
+            uint position = packet * 32 + i * 8 + col;
+            uint dst = (group_start + position) * width + feature;
+            raw[dst] = ushort(gate_pairs[i]);
+            raw[dst + width] = ushort(gate_pairs[i] >> 16);
+            raw[dst + half_width] = ushort(up_pairs[i]);
+            raw[dst + half_width + width] = ushort(up_pairs[i] >> 16);
+        }
+        """
     load = LOAD_COMPACT_JOINT if compact_descriptor else LOAD_JOINT
     suffix = "compact" if compact_descriptor else "base"
+    layout = f"transpose_{group_width}" if transposed else str(int(row_major))
     return mx.fast.metal_kernel(
-        name=f"local_unpack_bf16_joint_gate_{int(row_major)}_{suffix}",
+        name=f"local_unpack_bf16_joint_gate_{layout}_{suffix}",
         input_names=["digits", "exponents", "escaped", "descriptor"], output_names=["raw"],
         header=DECODE + JOINT_HEADER, source=r"""
         uint i = thread_position_in_grid.x;
@@ -142,14 +169,25 @@ def unpack_joint_kernel(row_major, compact_descriptor=False):
     )
 
 
-def unpack_joint(payload, *, row_major=False):
+def unpack_joint(payload, *, row_major=False, transposed=False, groups=1):
     blocks, chunks, descriptor_words = payload[-1].shape
-    shape = (blocks * 16, chunks * 16) if row_major else (blocks * 2, chunks * 4, 32)
-    out, = unpack_joint_kernel(row_major, descriptor_words == 1)(
+    if groups < 1 or (groups != 1 and (not transposed or blocks % groups)):
+        raise ValueError("Grouped weights require evenly sized transposed projections")
+    if transposed:
+        shape = (chunks * 32, blocks * 16 // groups)
+        if groups > 1:
+            shape = (groups, *shape)
+        dtype = mx.uint16
+    elif row_major:
+        shape, dtype = (blocks * 16, chunks * 16), mx.uint32
+    else:
+        shape, dtype = (blocks * 2, chunks * 4, 32), mx.uint32
+    group_width = blocks * 8 // groups if groups > 1 else 0
+    out, = unpack_joint_kernel(row_major, descriptor_words == 1, transposed, group_width)(
         inputs=payload, grid=(blocks * chunks * 32, 1, 1), threadgroup=(256, 1, 1),
-        output_shapes=[shape], output_dtypes=[mx.uint32],
+        output_shapes=[shape], output_dtypes=[dtype],
     )
-    return out.view(mx.bfloat16 if row_major else mx.uint16)
+    return out.view(mx.bfloat16 if row_major or transposed else mx.uint16)
 
 
 SWIGLU_OUTPUT = r"""

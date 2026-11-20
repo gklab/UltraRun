@@ -29,6 +29,7 @@ OPTIMIZED_MODEL = {
     "direct_delta_sequence": True,
     "async_verify": True,
     "layer_prefill": True,
+    "fast_prefill": True,
     "lossless_mtp_ffn": True,
     "wide_blocks": True,
     "compact_tree": True,

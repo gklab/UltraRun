@@ -104,9 +104,23 @@ def decoded_bits(coded):
 
 
 @lru_cache
-def row_major_kernel():
+def row_major_kernel(transposed=False):
+    writes = r"""
+        uint width = descriptor_shape[0] * 8;
+        uint feature = row_tile * 8 + row;
+        uint column = (packet % packets_per_row) * 32 + col;
+        for (uint tile = 0; tile < 4; ++tile) {
+            uint dst = (column + tile * 8) * width + feature;
+            raw[dst] = ushort(pairs[tile]);
+            raw[dst + width] = ushort(pairs[tile] >> 16);
+        }
+    """ if transposed else r"""
+        uint row_start = (row_tile * 8 + row) * packets_per_row * 16;
+        uint first = row_start + (packet % packets_per_row) * 16 + col / 2;
+        for (uint tile = 0; tile < 4; ++tile) raw[first + tile * 4] = pairs[tile];
+    """
     return mx.fast.metal_kernel(
-        name="local_unpack_lossless_down_row_major",
+        name="local_unpack_lossless_down_transposed" if transposed else "local_unpack_lossless_down_row_major",
         input_names=["digits", "exponents", "escaped", "descriptor"], output_names=["raw"],
         header=DECODE,
         source=r"""
@@ -121,18 +135,16 @@ def row_major_kernel():
                                     reinterpret_cast<device const uint*>(exponents),
                                     reinterpret_cast<device const uint4*>(escaped),
                                     descriptor[packet], lane);
-        uint row_start = (row_tile * 8 + row) * packets_per_row * 16;
-        uint first = row_start + (packet % packets_per_row) * 16 + col / 2;
-        for (uint tile = 0; tile < 4; ++tile) raw[first + tile * 4] = pairs[tile];
-        """,
+        """ + writes,
     )
 
 
-def unpack_row_major(payload):
+def unpack_row_major(payload, *, transposed=False):
     blocks, packets = payload[-1].shape
-    raw, = row_major_kernel()(
+    shape = (packets * 32, blocks * 8) if transposed else (blocks * 8, packets * 16)
+    raw, = row_major_kernel(transposed)(
         inputs=payload, grid=(blocks * packets * 32, 1, 1), threadgroup=(256, 1, 1),
-        output_shapes=[(blocks * 8, packets * 16)], output_dtypes=[mx.uint32],
+        output_shapes=[shape], output_dtypes=[mx.uint16 if transposed else mx.uint32],
     )
     return raw.view(mx.bfloat16)
 

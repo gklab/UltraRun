@@ -46,6 +46,100 @@ def causal_conv4(sequence, weights, windows=None):
     return output
 
 
+@lru_cache(maxsize=1)
+def prefill_convolution_kernel():
+    return mx.fast.metal_kernel(
+        name="local_delta_prefill_convolution_qkv",
+        input_names=["raw", "history", "weights", "silu"], output_names=["q", "k", "v"],
+        compile_options={"math_mode": "safe"},
+        source=r"""
+        uint group = thread_position_in_grid.x / 32;
+        uint lane = thread_index_in_simdgroup;
+        uint token = group / 80;
+        uint head = group % 80;
+        uint ch = head * 128 + 4 * lane;
+        float value[4], squares[4];
+        for (uint c = 0; c < 4; ++c) {
+            uint channel = ch + c;
+            float dot = 0.0f;
+            for (uint tap = 0; tap < 4; ++tap) {
+                uint position = token + tap;
+                float x = position < 3 ? float(history[position * 10240 + channel])
+                                       : float(raw[(position - 3) * 16384 + channel]);
+                dot = fma(x, float(weights[channel * 4 + tap]), dot);
+            }
+            bfloat16_t rounded = bfloat16_t(dot);
+            value[c] = float(silu[as_type<ushort>(rounded)]);
+            squares[c] = value[c] * value[c];
+        }
+        if (head < 32) {
+            // Match the four contiguous per-lane adds in MLX's row reduction.
+            float sum = ((squares[0] + squares[1]) + squares[2]) + squares[3];
+            float inv = metal::precise::rsqrt(simd_sum(sum) + 1e-6f);
+            uint dst = (token * 16 + head % 16) * 128 + 4 * lane;
+            for (uint c = 0; c < 4; ++c) {
+                float normalized = value[c] * inv;
+                if (head < 16) q[dst+c] = normalized * 0.08838834764831845f;
+                else k[dst+c] = normalized;
+            }
+        } else {
+            uint dst = (token * 48 + head - 32) * 128 + 4 * lane;
+            for (uint c = 0; c < 4; ++c) v[dst+c] = bfloat16_t(value[c]);
+        }
+        """,
+    )
+
+
+def prefill_convolution(projection, history, weight, silu):
+    rows = projection.shape[0]
+    return prefill_convolution_kernel()(
+        inputs=[projection, history, weight, silu],
+        output_shapes=[(rows, 16, 128), (rows, 16, 128), (rows, 48, 128)],
+        output_dtypes=[mx.float32, mx.float32, mx.bfloat16],
+        grid=(rows * 80 * 32, 1, 1), threadgroup=(256, 1, 1),
+    )
+
+
+@lru_cache(maxsize=1)
+def prefill_norm_gate_kernel():
+    return mx.fast.metal_kernel(
+        name="local_delta_prefill_norm_gate",
+        input_names=["value", "gate", "weight", "silu", "eps"], output_names=["out"],
+        compile_options={"math_mode": "safe"},
+        source=r"""
+        uint group = thread_position_in_grid.x / 32;
+        uint lane = thread_index_in_simdgroup;
+        uint start = group * 128 + 4 * lane;
+        float x[4];
+        float dot = 0.0f;
+        for (uint c = 0; c < 4; ++c) {
+            x[c] = float(value[start+c]);
+            dot = fma(x[c], x[c], dot);
+        }
+        float inv = metal::precise::rsqrt(simd_sum(dot) / 128.0f + eps[0]);
+        for (uint c = 0; c < 4; ++c) {
+            // Keep the BF16 rounding at the MLX RMSNorm output boundaries.
+            bfloat16_t rounded = bfloat16_t(x[c] * inv);
+            bfloat16_t normalized = bfloat16_t(float(rounded) * float(weight[lane * 4+c]));
+            out[start+c] = bfloat16_t(float(normalized) * silu[as_type<ushort>(gate[start+c])]);
+        }
+        """,
+    )
+
+
+@lru_cache(maxsize=1)
+def prefill_epsilon(epsilon):
+    return mx.array([epsilon], dtype=mx.float32)
+
+
+def prefill_norm_gate(value, gate, weight, epsilon, silu):
+    return prefill_norm_gate_kernel()(
+        inputs=[value, gate, weight, silu, prefill_epsilon(epsilon)],
+        output_shapes=[value.shape], output_dtypes=[mx.bfloat16],
+        grid=(value.size // 4, 1, 1), threadgroup=(256, 1, 1),
+    )[0]
+
+
 @lru_cache
 def recurrent_kernel(record_updates=False, prepared_tree=False, checkpoint=False, scheduled_tree=False):
     outputs = ["output", "next_state"]
@@ -250,6 +344,66 @@ def recurrent(q, k, v, decay, beta, state, group_rows, trace=False, normalize=Fa
         threadgroup=(group_rows * 32, 1, 1),
         output_shapes=shapes,
         output_dtypes=dtypes,
+    )
+
+
+@lru_cache
+def prefill_recurrent_kernel():
+    return mx.fast.metal_kernel(
+        name="local_delta_prefill_four_rows",
+        input_names=["query", "key", "value", "decay", "beta", "previous"],
+        output_names=["output", "next_state"],
+        source=r"""
+        // Four adjacent value channels share the same query and key loads.
+        uint lane = thread_position_in_grid.x % 32;
+        uint row = thread_position_in_grid.x / 32 * 4;
+        uint head = row / DV;
+        uint query_head = head / (HV / HK);
+        float4 state[DK / 32];
+        for (uint i = 0; i < DK / 32; ++i)
+            for (uint r = 0; r < 4; ++r)
+                state[i][r] = previous[(row + r) * DK + i * 32 + lane];
+
+        for (uint t = 0; t < value_shape[0]; ++t) {
+            uint qk_base = (t * HK + query_head) * DK + lane;
+            uint out_index = t * HV * DV + row;
+            float d = decay[t * HV + head];
+            float k[DK / 32];
+            float4 read(0.0f);
+            for (uint i = 0; i < DK / 32; ++i) {
+                k[i] = float(key[qk_base + i * 32]);
+                state[i] *= d;
+                read += state[i] * k[i];
+            }
+            float4 input = float4(float(value[out_index]), float(value[out_index + 1]),
+                                  float(value[out_index + 2]), float(value[out_index + 3]));
+            float4 total(simd_sum(read.x), simd_sum(read.y), simd_sum(read.z), simd_sum(read.w));
+            float4 update = (input - total) * beta[t * HV + head];
+            float4 result(0.0f);
+            for (uint i = 0; i < DK / 32; ++i) {
+                state[i] = fma(update, float4(k[i]), state[i]);
+                result += state[i] * float(query[qk_base + i * 32]);
+            }
+            float4 sum(simd_sum(result.x), simd_sum(result.y), simd_sum(result.z), simd_sum(result.w));
+            if (lane == 0)
+                for (uint r = 0; r < 4; ++r)
+                    output[out_index + r] = T(sum[r]);
+        }
+        for (uint i = 0; i < DK / 32; ++i)
+            for (uint r = 0; r < 4; ++r)
+                next_state[(row + r) * DK + i * 32 + lane] = state[i][r];
+        """,
+    )
+
+
+def prefill_recurrent(q, k, v, decay, beta, state, group_rows):
+    _, hv, dv = v.shape
+    _, hk, dk = k.shape
+    return prefill_recurrent_kernel()(
+        inputs=[q, k, v, decay, beta, state],
+        template=[("T", v.dtype), ("HV", hv), ("HK", hk), ("DK", dk), ("DV", dv)],
+        grid=(hv * dv * 32 // 4, 1, 1), threadgroup=(group_rows * 32, 1, 1),
+        output_shapes=[v.shape, state.shape], output_dtypes=[v.dtype, mx.float32],
     )
 
 

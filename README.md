@@ -13,9 +13,25 @@
 
 Run the original [Qwen3.8-27B BF16](https://huggingface.co/Qwen/Qwen3.8-27B/tree/37561816e66b5b9153b1b64c10968c18c1e6f4a0) safetensors weights with MLX and custom Metal kernels. UltraRun streams chat responses in the browser and terminal.
 
-**M2 Ultra benchmarks reached 51.63 tokens/s in Chinese streaming chat and 0.45 s to first token on a follow-up turn with prefix reuse.**
+**M2 Ultra · 4,096 uncached input tokens · 11.42 s to first token · 50.85 tokens/s streaming decode.**
 
 ## Performance
+
+### 4K prefill
+
+The optimized profile on Apple M2 Ultra with MLX 0.32.4 uses grouped FFN projections, fused DeltaNet prefill, and batched submission of the existing 512-token full-attention blocks. Gate/up and DeltaNet input projections use lossless operand conversion where the runtime can recover the original BF16 values. MTP prompt priming writes only the K/V cache needed by subsequent drafts.
+
+| Measurement | Result |
+| --- | ---: |
+| Target prefill, per-block vs. per-layer attention submission | 11.61 → **11.29 s** (2.8% lower) |
+| MTP prompt priming, full draft vs. K/V-only | 74.0 → **67.1 ms** |
+| Time to first token, complete streaming request | **11.42 s** |
+| Streaming decode throughput | **50.85 tokens/s** |
+| Peak MLX memory for the streaming request | **41.63 GiB** |
+
+The streaming request used a Chinese technical-report prompt, 4,096 uncached input tokens, and 1,024 output tokens. The BF16 target and native MTP were resident, the hardware reported `nominal` thermal state, and the request limit was 45.79 GiB. Swap reads and writes were zero. A separate run at `fair` reached 11.45 s to first token and 50.88 tokens/s. Both streams matched all 1,024 reference tokens.
+
+The attention A/B used the same resident model and prompt in A/B/B/A order. Prompt hidden states, target and MTP caches, and the first token matched bit for bit. Target prefill is timed separately from MTP priming and first-token scoring.
 
 ### Code completion throughput
 
@@ -66,7 +82,7 @@ Stop the service before benchmarking. Both acquire the same Metal workspace lock
 .venv/bin/python -m ultrarun.cli verify-kernel
 .venv/bin/python -m ultrarun.cli verify-model
 .venv/bin/python -m ultrarun.cli bench --runs 3 --jsonl runs/baseline.jsonl
-.venv/bin/python scripts/tune.py baseline frontierprefetch11
+.venv/bin/python scripts/tune.py baseline frontierprefetch11 fastprefill11
 ```
 
 The CLI benchmark uses the first 4,096 tokens of Python's standard-library `inspect.py` by default and generates 1,024 tokens. Use `--prompt-file` to supply another input. Results include decode throughput, end-to-end throughput, time to first token, peak memory, and the output token hash.

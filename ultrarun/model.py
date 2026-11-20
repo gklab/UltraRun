@@ -10,7 +10,9 @@ from mlx import nn
 from .attention_io import (
     K_HEADS, Q_HEADS, ROPE, WIDTH, normalize_rotate_qk, pack_gated_attention, update_attention_suffix,
 )
-from .delta import DeltaRollback, causal_conv4, recurrent, reference
+from .delta import (
+    DeltaRollback, causal_conv4, prefill_convolution, prefill_norm_gate, prefill_recurrent, recurrent, reference,
+)
 from .draft_projection import LanePrefixes, cached_mtp, continue_lane_prefix, multi_gemv, prepare_lane_prefixes
 from .logical_attention import attention_from_route, linear_route, logical_attention
 from .lossless_gate_up import LosslessPaired, encode_paired, unpack_joint
@@ -24,6 +26,11 @@ from .packed_projection import (
     pack_activations, pack_weight, packed_feed_forward_from_fragments, packed_head_argmax, packed_partials,
     packed_project, packed_swiglu, residual_norm_pack, unpack_weight,
 )
+from .prefill_gate_up import project as prefill_gate_up_project
+from .prefill_gate_up import project_qkvz as prefill_qkvz_project
+from .prefill_gate_up import supported as prefill_gate_up_supported
+from .prefill_gate_up import unpack_operand as prefill_unpack_operand
+from .prefill_gate_up import weight_scales as prefill_gate_up_scales
 from .projection import split_gemv, tiled_argmax
 
 COMPILED_DELTA_WIDTHS = (6, 11)
@@ -45,6 +52,14 @@ def project(x, weight, skinny=False):
 @mx.compile
 def swiglu(gate, up):
     return nn.silu(gate) * up
+
+
+@lru_cache(maxsize=2)
+def prefill_silu_values(dtype=mx.bfloat16):
+    words = mx.arange(65536, dtype=mx.int32).astype(mx.uint16).view(mx.bfloat16)
+    values = nn.silu(words.astype(mx.float32)) if dtype == mx.float32 else swiglu(words, mx.ones_like(words))
+    mx.eval(values)
+    return values
 
 
 @mx.compile
@@ -133,6 +148,11 @@ class Layer:
         self.short_tokens = 8
         self.split_attention = False
         self.fused_attention_io = False
+        self.fast_prefill = False
+        self.prefill_gate_up = None
+        self.prefill_gate_scales = None
+        self.prefill_qkvz_scales = None
+        self.prefill_qkvz_operand = None
         for name in ("input_layernorm", "post_attention_layernorm", "self_attn.q_norm", "self_attn.k_norm"):
             key = f"{name}.weight"
             if key in weights:
@@ -154,15 +174,30 @@ class Layer:
         weights = [self.w.pop(f"{name}.weight") for name in names]
         self.w[target] = mx.concatenate(weights, axis=0)
 
-    def prefill_copy(self):
+    def prefill_copy(self, *, fast_prefill=False, group_ffn=False):
         layer = copy(self)
         layer.w = dict(self.w)
+        layer.fast_prefill = fast_prefill
+        if not (group_ffn and fast_prefill):
+            layer.prefill_gate_scales = None
         for name in self.packed_weights:
             weight = self.w[name]
             if isinstance(weight, LosslessPaired):
-                layer.w[name] = unpack_joint(weight.payload, row_major=True)
+                if group_ffn and name == "ffn_in" and weight.payload[-1].shape[:2] == (2176, 160):
+                    if layer.prefill_gate_scales is None:
+                        # Each group contains 1024 matched gate and up columns.
+                        layer.prefill_gate_up = unpack_joint(weight.payload, transposed=True, groups=17)
+                    continue
+                if fast_prefill and name == "delta_qkvz" and layer.prefill_qkvz_scales is not None:
+                    right, forward = layer.prefill_qkvz_scales
+                    layer.prefill_qkvz_operand = prefill_unpack_operand(weight.payload, forward, interleaved=False), right
+                    continue
+                # The 4K path materializes the right-hand GEMM operand directly.
+                layer.w[name] = (unpack_joint(weight.payload, transposed=True).T if fast_prefill
+                                 else unpack_joint(weight.payload, row_major=True))
             elif isinstance(weight, LosslessDown):
-                layer.w[name] = unpack_row_major(weight.payload)
+                unpacked = unpack_row_major(weight.payload, transposed=fast_prefill)
+                layer.w[name] = unpacked.T if fast_prefill else unpacked
             else:
                 layer.w[name] = unpack_weight(weight)
         layer.packed_weights = set()
@@ -170,6 +205,14 @@ class Layer:
 
     def project(self, x, name):
         weight = self.w[name]
+        if name == "delta_qkvz" and self.prefill_qkvz_operand is not None:
+            if x.shape == (2048, 5120) and x.dtype == mx.bfloat16:
+                result = prefill_qkvz_project(x, *self.prefill_qkvz_operand)
+                if result is not None:
+                    return result
+            if isinstance(weight, LosslessPaired):
+                weight = unpack_joint(weight.payload, transposed=True).T
+                self.w[name] = weight
         if isinstance(weight, LosslessRow):
             if x.shape[0] == 1 and x.dtype == mx.bfloat16:
                 return weight.project_row(x)
@@ -284,12 +327,27 @@ class Layer:
         h = mx.fast.rms_norm(x, self.w["post_attention_layernorm.weight"], self.eps).astype(x.dtype)
         if self.fused_ffn and h.shape[0] <= self.short_tokens and h.dtype == mx.bfloat16:
             return x + self.feed_forward_from_fragments(pack_activations(h), h.shape[0])
-        if "ffn_in" in self.w:
+        full_window = h.shape == (PREFILL_WINDOW_TOKENS, 5120) and h.dtype == mx.bfloat16
+        gate_up = self.prefill_gate_up
+        if full_window and self.fast_prefill and self.prefill_gate_scales is not None:
+            payload = self.w["ffn_in"].payload
+            hidden = prefill_gate_up_project(h, payload, self.prefill_gate_scales, prefill_silu_values())
+            if hidden is not None:
+                return x + self.project(hidden, "mlp.down_proj.weight")
+            gate_up = unpack_joint(payload, transposed=True, groups=17)
+        if gate_up is not None and full_window:
+            # Keep both matrix dimensions small enough for the faster Metal tile.
+            projection = h.reshape(2, 1, 2048, 5120) @ gate_up[None]
+            gate, up = mx.split(projection, 2, axis=-1)
+            hidden = swiglu(gate, up).transpose(0, 2, 1, 3).reshape(4096, -1)
+        elif "ffn_in" in self.w:
             gate, up = mx.split(self.project(h, "ffn_in"), 2, axis=-1)
+            hidden = swiglu(gate, up)
         else:
             gate = self.project(h, "mlp.gate_proj.weight")
             up = self.project(h, "mlp.up_proj.weight")
-        return x + self.project(swiglu(gate, up), "mlp.down_proj.weight")
+            hidden = swiglu(gate, up)
+        return x + self.project(hidden, "mlp.down_proj.weight")
 
     def feed_forward_from_fragments(self, packed, tokens):
         gate_up, down = self.w["ffn_in"], self.w["mlp.down_proj.weight"]
@@ -316,7 +374,17 @@ class Layer:
         fused = self.fused_delta and not self.use_reference and taps == 3 and size <= self.short_tokens
         fused_io = (self.fused_delta_io and fused and tree is None and x.dtype == mx.bfloat16
                     and not isinstance(w.get("delta_qkvz"), LosslessPaired))
-        if fused_io:
+        fused_prefill = (
+            self.fast_prefill and projected_ab is not None and not keep_replay and not fused and tree is None
+            and not self.use_reference and x.dtype == history.dtype == w["conv"].dtype == mx.bfloat16
+            and w["linear_attn.norm.weight"].dtype == mx.bfloat16 and w.get("delta_qkvz") is not None
+            and (size, hv, dv, hk, dk, taps) == (2048, 48, 128, 16, 128, 3)
+        )
+        if fused_prefill:
+            projection = self.project(x, "delta_qkvz")
+            q, k, v = prefill_convolution(projection, history, w["conv"], prefill_silu_values())
+            z = projection[:, conv_size:]
+        elif fused_io:
             qkv, z, seq = projected_convolution(x, w["delta_qkvz"], history, w["conv"])
         else:
             weight = w.get("delta_qkvz")
@@ -339,13 +407,16 @@ class Layer:
                 qkv = nn.silu(mx.conv1d(seq[None], w["conv"], groups=conv_size)[0])
         ab = self.project(x, "delta_ab") if projected_ab is None else projected_ab
         a, b = mx.split(ab, 2, axis=-1)
-        if tree is None:
+        if fused_prefill:
+            cache.conv = mx.contiguous(projection[-taps:, :conv_size])
+        elif tree is None:
             cache.conv = mx.contiguous(seq[-taps:])
-        q, k, v = mx.split(qkv, [key_size, 2 * key_size], axis=-1)
-        q, k = q.reshape(size, hk, dk), k.reshape(size, hk, dk)
-        if not fused:
-            q, k = unit_norm(q) * (dk ** -0.5), unit_norm(k)
-        v = v.reshape(size, hv, dv)
+        if not fused_prefill:
+            q, k, v = mx.split(qkv, [key_size, 2 * key_size], axis=-1)
+            q, k = q.reshape(size, hk, dk), k.reshape(size, hk, dk)
+            if not fused:
+                q, k = unit_norm(q) * (dk ** -0.5), unit_norm(k)
+            v = v.reshape(size, hv, dv)
         decay, beta = delta_coefficients(a, b, w["linear_attn.A_log"], w["linear_attn.dt_bias"])
         state = cache.delta
         if state is None:
@@ -372,6 +443,9 @@ class Layer:
                                        trace=True, normalize=fused,
                                        parents=None if tree is None else tree.parents)
             cache.delta = trajectory[-1]
+        elif (self.fast_prefill and projected_ab is not None and not fused and tree is None
+              and v.dtype == mx.bfloat16 and (size, hv, dv, hk, dk) == (2048, 48, 128, 16, 128)):
+            y, cache.delta = prefill_recurrent(q, k, v, decay, beta, state, self.group_rows)
         else:
             y, cache.delta = recurrent(q, k, v, decay, beta, state, self.group_rows, normalize=fused)
         if keep_replay or tree is not None:
@@ -381,11 +455,14 @@ class Layer:
         z = z.reshape(size, hv, dv)
         if fused_io:
             return gated_projection(y, z, w["linear_attn.norm.weight"], self.eps, w["linear_attn.out_proj.weight"])
-        y = mx.fast.rms_norm(y, w["linear_attn.norm.weight"], self.eps)
-        if fused:
-            y = delta_output(y, z)
+        if fused_prefill:
+            y = prefill_norm_gate(y, z, w["linear_attn.norm.weight"], self.eps, prefill_silu_values(mx.float32))
         else:
-            y = (y.astype(mx.float32) * nn.silu(z.astype(mx.float32))).astype(x.dtype)
+            y = mx.fast.rms_norm(y, w["linear_attn.norm.weight"], self.eps)
+            if fused:
+                y = delta_output(y, z)
+            else:
+                y = (y.astype(mx.float32) * nn.silu(z.astype(mx.float32))).astype(x.dtype)
         return self.project(y.reshape(size, hv * dv), "linear_attn.out_proj.weight")
 
     def accept(self, cache, offset, total, keep):
@@ -409,11 +486,12 @@ class Layer:
                     q[:keep], k[:keep], v[:keep], decay[:keep], beta[:keep], state, self.group_rows
                 )
 
-    def attention(self, x, cache, offset, tree=None, last_only=False, *, projected_qkv=None, return_gate=False):
+    def attention(self, x, cache, offset, tree=None, last_only=False, *, projected_qkv=None, return_gate=False,
+                  kv_only=False):
         c, w = self.c, self.w
         size, head_dim = x.shape[0], c["head_dim"]
         hq, hk = c["num_attention_heads"], c["num_key_value_heads"]
-        fused = (self.fused_attention_io and not last_only and 2 <= size <= self.short_tokens
+        fused = (self.fused_attention_io and not (last_only or kv_only) and 2 <= size <= self.short_tokens
                  and x.dtype == mx.bfloat16)
         if "attn_qkv" in w:
             raw = self.project(x, "attn_qkv") if projected_qkv is None else projected_qkv
@@ -421,10 +499,12 @@ class Layer:
                 raw, [2 * hq * head_dim, (2 * hq + hk) * head_dim], axis=-1
             )
         else:
-            q = self.project(x, "self_attn.q_proj.weight")
+            if not kv_only:
+                q = self.project(x, "self_attn.q_proj.weight")
             k = self.project(x, "self_attn.k_proj.weight")
             v = self.project(x, "self_attn.v_proj.weight")
-        q, gate = mx.split(q.reshape(size, hq, 2 * head_dim), 2, axis=-1)
+        if not kv_only:
+            q, gate = mx.split(q.reshape(size, hq, 2 * head_dim), 2, axis=-1)
         rope = c["rope_parameters"]
         # The three mRoPE position streams are identical for text-only inputs.
         if fused:
@@ -432,24 +512,27 @@ class Layer:
             q, k = normalize_rotate_qk(raw, w["self_attn.q_norm.weight"], w["self_attn.k_norm.weight"],
                                        positions, rope["rope_theta"], self.eps, tree=tree is not None)
         else:
-            if last_only:
-                q, gate = q[-1:], gate[-1:]
-            q = mx.fast.rms_norm(q, w["self_attn.q_norm.weight"], self.eps).astype(x.dtype)
+            if not kv_only:
+                if last_only:
+                    q, gate = q[-1:], gate[-1:]
+                q = mx.fast.rms_norm(q, w["self_attn.q_norm.weight"], self.eps).astype(x.dtype)
             k = mx.fast.rms_norm(k.reshape(size, hk, head_dim), w["self_attn.k_norm.weight"], self.eps).astype(x.dtype)
             args = dict(dims=int(head_dim * rope["partial_rotary_factor"]), traditional=False,
                         base=rope["rope_theta"], scale=1.0, offset=offset)
             if tree is None:
-                q_args = {**args, "offset": offset + size - 1} if last_only else args
-                q = mx.fast.rope(q.transpose(1, 0, 2)[None], **q_args)
+                if not kv_only:
+                    q_args = {**args, "offset": offset + size - 1} if last_only else args
+                    q = mx.fast.rope(q.transpose(1, 0, 2)[None], **q_args)
                 k = mx.fast.rope(k.transpose(1, 0, 2)[None], **args)
             else:
                 args["offset"] = tree.positions
-                q = mx.fast.rope(q[:, :, None, :], **args)[:, :, 0, :].transpose(1, 0, 2)[None]
+                if not kv_only:
+                    q = mx.fast.rope(q[:, :, None, :], **args)[:, :, 0, :].transpose(1, 0, 2)[None]
                 k = mx.fast.rope(k[:, :, None, :], **args)[:, :, 0, :].transpose(1, 0, 2)[None]
         v = v.reshape(size, hk, head_dim).transpose(1, 0, 2)[None]
         prompt_kv = cache.prompt_kv
         segmented_draft = (prompt_kv is not None and self.reserve_single_kv and not self.fused_attention_io
-                           and q.shape[2] == 1 and tree is None and x.dtype == mx.bfloat16
+                           and (last_only or size == 1) and tree is None and x.dtype == mx.bfloat16
                            and head_dim == 256 and hq % (2 * hk) == 0)
         logical = (cache.logical_attention and fused) or segmented_draft
         if prompt_kv is not None and not logical:
@@ -483,6 +566,8 @@ class Layer:
                 k = mx.concatenate((old_keys, k), axis=2)
                 v = mx.concatenate((old_values, v), axis=2)
             cache.keys, cache.values = k, v
+        if kv_only:
+            return
         scale = head_dim ** -0.5
         if logical:
             # Short Q/K and reserved K/V have 256 contiguous BF16 values per head.
@@ -713,7 +798,7 @@ class Model:
                  lossless_gate_up=False, lossless_inputs=False, lossless_attention_outputs=False,
                  lossless_vocabulary=False, paired_down=False, lossless_draft_rows=0,
                  shared_vocabulary=False, compiled_delta=False, layer_prefill=False, lossless_mtp_ffn=False,
-                 async_verify=False, direct_delta_sequence=False, budget=None):
+                 async_verify=False, direct_delta_sequence=False, fast_prefill=False, budget=None):
         if (packed_ffn or packed_main) and (not merge or budget is None):
             raise ValueError("Packed projections need merged weights and an active memory budget")
         if packed_ffn and packed_main:
@@ -792,6 +877,9 @@ class Model:
         self.lossless_input_count = 0
         self.lossless_attention_output_count = 0
         if packed_main:
+            can_scale_prefill = (fast_prefill and layer_prefill and self.fused_attention_io
+                                 and (lossless_gate_up or lossless_inputs)
+                                 and prefill_gate_up_supported())
             residual_norm_epsilon = mx.array([c["rms_norm_eps"]], dtype=mx.float32) if fused_residual else None
             layouts = {"ffn_in": (34816, 5120), "mlp.down_proj.weight": (5120, 17408),
                        "delta_qkvz": (16384, 5120)}
@@ -815,6 +903,15 @@ class Model:
                         "self_attn.o_proj.weight", "linear_attn.out_proj.weight",
                     )
                     encode_paired_down = paired_down and name == "mlp.down_proj.weight"
+                    scale_gate = encode_gate
+                    scale_qkvz = encode_input and name == "delta_qkvz"
+                    if (can_scale_prefill and (scale_gate or scale_qkvz)
+                            and mx.get_active_memory() + budget.cache_limit + 4 * weight.nbytes <= budget.limit):
+                        scales = prefill_gate_up_scales(weight, interleaved=scale_gate)
+                        if scale_gate:
+                            layer.prefill_gate_scales = scales
+                        else:
+                            layer.prefill_qkvz_scales = scales
                     if encode_gate or encode_input or encode_attention_output or encode_paired_down:
                         paired = encode_paired(packed, compact_descriptors=encode_gate or encode_input or encode_attention_output)
                         if not mx.array_equal(unpack_joint(paired.payload), packed).item():
@@ -894,6 +991,7 @@ class Model:
         self.direct_delta_sequence = direct_delta_sequence
         self.async_verify = async_verify
         self.layer_prefill = layer_prefill
+        self.fast_prefill = fast_prefill
         self.packed_head = None
         self.draft_vocabulary = None
         self.draft_vocabulary_rows = 0
@@ -1040,7 +1138,7 @@ class Model:
             del blocks
 
     def prefill_window(self, tokens, cache, offset, chunk):
-        # Keep the original token blocks and reuse only the current layer's row-major weights.
+        # Keep the original token blocks and reuse only the current layer's unpacked weights.
         blocks = [self.embedding[tokens[start:start + chunk]] for start in range(0, tokens.size, chunk)]
         # Batch only the verified 512-token blocks. Keep the partial tail's existing path.
         complete_blocks = tokens.size // chunk
@@ -1051,9 +1149,11 @@ class Model:
         # The 4K panel was checked on the optimized M2 Ultra profile.
         join_delta = (join_ffn and self.fused_attention_io and offset == 0
                       and complete_blocks == 8 and tokens.size == complete_tokens)
+        fast_prefill = self.fast_prefill and join_delta
         for i, (layer, state) in enumerate(zip(self.layers, cache), start=1):
-            prepared = layer.prefill_copy()
+            prepared = layer.prefill_copy(fast_prefill=fast_prefill, group_ffn=fast_prefill)
             delta_panel = join_delta and isinstance(layer.w.get("delta_qkvz"), LosslessPaired)
+            batch_attention_eval = fast_prefill and not layer.gdn
             if delta_panel:
                 residuals = []
                 for start in range(0, complete_blocks, 4):
@@ -1078,7 +1178,8 @@ class Model:
                         output = hidden + current.attention_result(hidden, state, position)
                     else:
                         output = current.forward(hidden, state, position)
-                    self.evaluate(output, [state])
+                    if not batch_attention_eval:
+                        self.evaluate(output, [state])
                     blocks[j] = output
                     self.budget.check()
                 del current
@@ -1086,6 +1187,10 @@ class Model:
                 # Attention has advanced the cache for every block; the FFN is row-independent.
                 if not delta_panel:
                     ffn_input = mx.concatenate(blocks[:complete_blocks], axis=0)
+                    if batch_attention_eval:
+                        # Keep each 512-row attention calculation and submit them together.
+                        self.evaluate(ffn_input, [state])
+                        self.budget.check()
                 output = prepared.ffn_residual(ffn_input)
                 del ffn_input
                 mx.eval(output)
@@ -1219,8 +1324,8 @@ class Model:
         norm = self.mtp_norms[0]
         return prepare_lane_prefixes(self.mtp_fc, self.embedding, norm, self.config["rms_norm_eps"], ids, budget)
 
-    def draft(self, hidden, next_tokens, cache, offset, *, cached_embedding=None):
-        embed_norm, hidden_norm, head_norm = self.mtp_norms
+    def _draft_input(self, hidden, next_tokens, cache, cached_embedding=None):
+        embed_norm, hidden_norm, _ = self.mtp_norms
         eps = self.config["rms_norm_eps"]
         hidden = mx.fast.rms_norm(hidden, hidden_norm, eps).astype(hidden.dtype)
         if cached_embedding is None:
@@ -1233,8 +1338,20 @@ class Model:
                 x = project(joined, self.mtp_fc)
         else:
             x = cached_mtp(hidden, self.draft_hidden_fc, *cached_embedding)
+        return x
+
+    def draft(self, hidden, next_tokens, cache, offset, *, cached_embedding=None):
+        x = self._draft_input(hidden, next_tokens, cache, cached_embedding)
         x = self.mtp_layer.forward(x, cache, offset, last_only=self.fast_draft and x.shape[0] > 1)
-        return mx.fast.rms_norm(x, head_norm, eps).astype(x.dtype)
+        return mx.fast.rms_norm(x, self.mtp_norms[2], self.config["rms_norm_eps"]).astype(x.dtype)
+
+    def prime_draft(self, hidden, next_tokens, cache, offset):
+        # Prompt pairs only initialize K/V for the single MTP layer.
+        x = self._draft_input(hidden, next_tokens, cache)
+        layer = self.mtp_layer
+        norm = mx.fast.rms_norm(x, layer.w["input_layernorm.weight"], layer.eps).astype(x.dtype)
+        layer.attention(norm, cache, offset, last_only=self.fast_draft and x.shape[0] > 1, kv_only=True)
+        mx.eval(cache.keys, cache.values)
 
     def draft_root_pair(self, hidden, tokens, cache, offset, head):
         hidden, scores = self.draft_batch(hidden, tokens, (cache, copy(cache)), (offset, offset), head)

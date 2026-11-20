@@ -78,8 +78,8 @@ CANDIDATES["rootbranch10"] = [*CANDIDATES["selective10"], "--draft-root-branch-g
 CANDIDATES["compacttree10"] = []
 for key, value in {**OPTIMIZED_MODEL, **OPTIMIZED_DRAFT}.items():
     if key in {"lossless_vocabulary", "paired_down", "lossless_draft_rows", "shared_vocabulary",
-               "compiled_delta", "layer_prefill"}:
-        continue  # Keep the original vocabulary and down projection for comparisons.
+               "compiled_delta", "layer_prefill", "fast_prefill", "async_verify", "direct_delta_sequence"}:
+        continue  # Keep comparison-specific flags and server-only options out of the base CLI preset.
     CANDIDATES["compacttree10"].append("--" + key.replace("_", "-"))
     if value is not True:
         CANDIDATES["compacttree10"].append(str(value))
@@ -99,6 +99,7 @@ CANDIDATES["layerprefill10"] = [*CANDIDATES["compileddelta10"], "--layer-prefill
 CANDIDATES["logical10"] = [*CANDIDATES["layerprefill10"], "--draft-schedule", "logical"]
 CANDIDATES["frontier11"] = [*CANDIDATES["layerprefill10"], "--draft-schedule", "frontier"]
 CANDIDATES["frontierprefetch11"] = [*CANDIDATES["layerprefill10"], "--draft-schedule", "frontier_prefetch"]
+CANDIDATES["fastprefill11"] = [*CANDIDATES["frontierprefetch11"], "--fast-prefill"]
 CANDIDATES["paireddown10"] = [*CANDIDATES["losslessvocab10"], "--paired-down"]
 CANDIDATES["sharedpaireddown10"] = [*CANDIDATES["shareddraft10"], "--paired-down"]
 CANDIDATES["dualhead10"] = [arg for arg in CANDIDATES["compacttree10"] if arg != "--packed-head-only"]

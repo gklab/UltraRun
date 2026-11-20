@@ -16,7 +16,7 @@ from jinja2.ext import Extension
 import mlx.core as mx
 from tokenizers import Tokenizer
 
-from .delta import DeltaRollback, causal_conv4, recurrent, reference
+from .delta import DeltaRollback, causal_conv4, prefill_recurrent, recurrent, reference
 from .draft_ranking import draft_rank
 from .draft_short_head import REQUEST_RESERVE_BYTES, RequestDraftHead, retained_prompt_rows
 from .draft_vocab_prefetch import PREFETCH_RESERVE_BYTES, DraftVocabPrefetch
@@ -157,8 +157,7 @@ def generate(model, ids, limit, chunk, stop=(), draft_depth=0, lookup_depth=0, d
         prepared_draft = shortlist, model.draft_embedding_table(shortlist, draft_vocab)
     if cached and cached < len(ids) and draft_depth:
         # The saved MTP state ends one pair before the main model's prefix.
-        primed = model.draft(hidden, tokens[cached:cached + 1], mtp_cache, cached - 1)
-        model.evaluate(primed, [mtp_cache])
+        model.prime_draft(hidden, tokens[cached:cached + 1], mtp_cache, cached - 1)
     if cached == len(ids) and hidden is not None:
         output = mx.argmax(model.logits(hidden[-1:])[0])
         model.evaluate(output, cache)
@@ -169,8 +168,7 @@ def generate(model, ids, limit, chunk, stop=(), draft_depth=0, lookup_depth=0, d
         last = end == len(ids)
         pairs = min(end, len(ids) - 1) - offset
         if draft_depth and pairs:
-            primed = model.draft(hidden[:pairs], tokens[offset + 1:offset + 1 + pairs], mtp_cache, offset)
-            model.evaluate(primed[-1:], [mtp_cache])
+            model.prime_draft(hidden[:pairs], tokens[offset + 1:offset + 1 + pairs], mtp_cache, offset)
         output = mx.argmax(model.logits(hidden[-1:])[0]) if last else hidden[-1:]
         model.evaluate(output, cache)
         if budget:
@@ -762,6 +760,10 @@ def verify_kernel():
         assert mx.array_equal(trajectory[-2], halfway).item()
         assert mx.array_equal(trajectory[-1], final).item()
     print("DeltaNet FP32 state and BF16 output match the reference recurrence.")
+    actual, state = recurrent(q, k, v, decay, beta, initial, 4)
+    prefill, prefill_state = prefill_recurrent(q, k, v, decay, beta, initial, 4)
+    assert mx.array_equal(prefill.view(mx.uint16), actual.view(mx.uint16)).item()
+    assert mx.array_equal(prefill_state.view(mx.uint32), state.view(mx.uint32)).item()
     raw_q, raw_k = q.astype(mx.bfloat16), k.astype(mx.bfloat16)
     for keys, queries, normalize in ((k, q, False), (raw_k, raw_q, True)):
         inputs = (queries[:8], keys[:8], v[:8], decay[:8], beta[:8], initial, 4)
@@ -844,6 +846,8 @@ def verify_kernel():
     coded = encode_down(packed)
     assert mx.array_equal(decoded_bits(coded.payload), packed).item()
     assert mx.array_equal(unpack_row_major(coded.payload).view(mx.uint16), original.view(mx.uint16)).item()
+    assert mx.array_equal(unpack_row_major(coded.payload, transposed=True).T.view(mx.uint16),
+                          original.view(mx.uint16)).item()
     for width in (6, 11, 16):
         x_packed = pack_activations(mx.random.normal((width, original.shape[1])).astype(mx.bfloat16))
         expected = packed_partials(x_packed, width, packed)
@@ -884,6 +888,11 @@ def verify_kernel():
         assert mx.array_equal(unpack_joint(joint.payload), paired_gate_up).item()
         assert mx.array_equal(unpack_joint(joint.payload, row_major=True).view(mx.uint16),
                               unpack_weight(paired_gate_up).view(mx.uint16)).item()
+        assert mx.array_equal(unpack_joint(joint.payload, transposed=True).T.view(mx.uint16),
+                              unpack_weight(paired_gate_up).view(mx.uint16)).item()
+        group_order = unpack_weight(paired_gate_up).reshape(2, 4, 8, 5120).transpose(1, 3, 0, 2)
+        assert mx.array_equal(unpack_joint(joint.payload, transposed=True, groups=4).view(mx.uint16),
+                              group_order.reshape(4, 5120, 16).view(mx.uint16)).item()
         for tokens in (6, 11, 16):
             x_packed = pack_activations(mx.random.normal((tokens, 5120)).astype(mx.bfloat16))
             standard = swiglu_activations(x_packed, tokens, paired_gate_up)
@@ -1232,6 +1241,8 @@ def main():
     packing.add_argument("--packed-main", action="store_true")
     parser.add_argument("--layer-prefill", action="store_true",
                         help="reuse unpacked weights across prompt blocks one layer at a time")
+    parser.add_argument("--fast-prefill", action="store_true",
+                        help="enable the optimized 4096-token prefill window on supported M2 Ultra setups")
     parser.add_argument("--lossless-down", action="store_true",
                         help="store packed down projection weights as reversible BF16 packets")
     parser.add_argument("--paired-down", action="store_true",
@@ -1345,6 +1356,8 @@ def main():
         parser.error("--compiled-delta requires --compact-delta, --fused-delta and --fused-residual")
     if args.layer_prefill and not args.packed_main:
         parser.error("--layer-prefill requires --packed-main")
+    if args.fast_prefill and not (args.layer_prefill and args.packed_attention and args.fused_attention_io):
+        parser.error("--fast-prefill requires --layer-prefill, --packed-attention and --fused-attention-io")
     if args.draft_depth > 8 and not args.wide_blocks:
         parser.error("draft depths above eight require --wide-blocks")
     if args.fast_draft and not args.draft_depth:
@@ -1429,7 +1442,7 @@ def run(args, budget):
                   lossless_draft_rows=args.draft_vocab if args.lossless_draft_vocab else 0,
                   shared_vocabulary=args.shared_vocabulary,
                   compiled_delta=args.compiled_delta,
-                  layer_prefill=args.layer_prefill,
+                  layer_prefill=args.layer_prefill, fast_prefill=args.fast_prefill,
                   lossless_mtp_ffn=args.lossless_mtp_ffn,
                   budget=budget)
     print(f"BF16 text model loaded in {perf_counter() - start:.2f}s", file=sys.stderr)
